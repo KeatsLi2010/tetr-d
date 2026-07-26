@@ -19,7 +19,7 @@ import type {
 export interface DgLabControllerOptions {
   readonly now?: () => number;
   readonly createTransport?: (
-    onStatus: (status: DgLabStatus["connection"], clientId: string | null) => void,
+    onStatus: (status: DgLabStatus["connection"], clientId: string | null, error?: string) => void,
     config: DgLabConfig
   ) => DgLabTransport;
 }
@@ -91,10 +91,12 @@ export class DgLabController {
     this.#clearError();
     this.#disposeTransport();
     this.#connection = "connecting";
-    const transport = this.#createTransport((status) => {
+    const transport = this.#createTransport((status, _clientId, error) => {
       this.#connection = status;
       if (status === "paired") this.#clearError();
-      if (status === "error") this.#lastError = "蓝牙连接失败，请确认使用 HTTPS/Chrome 并选择郊狼 3.0。";
+      if (status === "error") this.#lastError = error === undefined || error.length === 0
+        ? "蓝牙连接失败，请确认使用 HTTPS/Chrome 并选择郊狼 3.0。"
+        : `蓝牙错误：${error}`;
       if (status !== "paired") this.#armed = false;
       if (status === "offline" || status === "error") this.#stopOutput(true);
       this.#publish();

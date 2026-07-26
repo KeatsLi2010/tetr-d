@@ -47,7 +47,7 @@ export interface DgLabBluetoothTransportOptions {
   readonly adapter?: DgLabBluetoothAdapter;
 }
 
-type StatusListener = (status: DgLabConnectionStatus, clientId: string | null) => void;
+type StatusListener = (status: DgLabConnectionStatus, clientId: string | null, error?: string) => void;
 type MessageListener = (message: DgLabTransportMessage) => void;
 
 const INVALID_WAVEFORM = Object.freeze({ frequencies: [10, 10, 10, 10], intensities: [101, 101, 101, 101] });
@@ -115,9 +115,9 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     this.close();
     this.#setStatus("connecting");
     const generation = ++this.#generation;
-    void this.#connect(generation).catch(() => {
+    void this.#connect(generation).catch((error: unknown) => {
       if (generation !== this.#generation) return;
-      this.#setStatus("error");
+      this.#setStatus("error", error instanceof Error ? error.message : "未知蓝牙错误");
     });
   }
 
@@ -212,8 +212,8 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   }
 
   #queueWrite(bytes: Uint8Array): void {
-    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(() => this.#writeBytes(bytes)).catch(() => {
-      if (this.#status !== "offline") this.#setStatus("error");
+    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(() => this.#writeBytes(bytes)).catch((error: unknown) => {
+      if (this.#status !== "offline") this.#setStatus("error", error instanceof Error ? error.message : "蓝牙写入失败");
     });
   }
 
@@ -257,9 +257,9 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     this.#setStatus("offline");
   }
 
-  #setStatus(status: DgLabConnectionStatus): void {
+  #setStatus(status: DgLabConnectionStatus, error?: string): void {
     this.#status = status;
-    this.#onStatus(status, null);
+    this.#onStatus(status, null, error);
   }
 
   #emit(message: DgLabTransportMessage): void {
