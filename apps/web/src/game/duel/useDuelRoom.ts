@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import type { PlayerConfig } from "../../config/v3/index.ts";
+import type { DgLabPenaltyEvent } from "../../dglab/dglabTypes.ts";
 import {
   BROWSER_FRAME_SCHEDULER,
   LatestFramePublisher
@@ -29,14 +30,15 @@ const EMPTY_VIEW: DuelRoomView = {
 };
 
 export function useDuelRoom(
-  config: PlayerConfig
+  config: PlayerConfig,
+  onPenaltyEvent?: (event: DgLabPenaltyEvent) => void
 ): DuelRoomView & DuelRoomActions {
   const initialConfig = useRef(config).current;
   const sessionRef = useRef<DuelRoomSession | null>(null);
   const [view, setView] = useState<DuelRoomView>(EMPTY_VIEW);
 
   useEffect(() => {
-    const session = new DuelRoomSession(initialConfig);
+    const session = new DuelRoomSession(initialConfig, onPenaltyEvent);
     const publisher = new LatestFramePublisher(
       setView,
       BROWSER_FRAME_SCHEDULER
@@ -56,7 +58,7 @@ export function useDuelRoom(
       session.dispose();
       if (sessionRef.current === session) sessionRef.current = null;
     };
-  }, [initialConfig]);
+  }, [initialConfig, onPenaltyEvent]);
 
   const requireSession = useCallback((): DuelRoomSession => {
     const session = sessionRef.current;

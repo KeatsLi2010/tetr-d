@@ -77,6 +77,7 @@ npm run dev:server
 - [实时协议 v4](docs/protocol.md)
 - [状态同步](docs/match-state-sync.md)
 - [持久回放](docs/replays.md)
+- [DG-LAB 本地反馈](docs/dglab-feedback.md)
 - [SRS+ 规则](docs/rules/srs-plus.md)
 - [玩家本地配置](docs/ui/player-config.md)
 - [单人练习模式](docs/ui/solo-mode.md)

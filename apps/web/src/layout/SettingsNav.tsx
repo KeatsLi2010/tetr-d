@@ -1,6 +1,6 @@
 import { Icon } from "../ui/Icon";
 
-export type SettingsSection = "controls" | "handling";
+export type SettingsSection = "controls" | "handling" | "dglab";
 
 interface SettingsNavProps {
   readonly active: SettingsSection;
@@ -19,7 +19,13 @@ const items = [
     icon: "HF",
     label: "操作手感",
     hint: "DAS · ARR · DCD · SDF"
-  }
+  },
+  {
+    id: "dglab" as const,
+    icon: "DG",
+    label: "DG-LAB 反馈",
+    hint: "本地配对与安全上限"
+  },
 ];
 
 export function SettingsNav({

@@ -16,6 +16,7 @@ import "./styles/arena-shell.css";
 import "./styles/duel.css";
 import "./styles/garbage-preview.css";
 import "./styles/b2b-indicator.css";
+import "./styles/dglab.css";
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("Missing application root.");

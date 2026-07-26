@@ -6,11 +6,16 @@ import { GameHud } from "../game/components/GameHud";
 import { GameOverlay } from "../game/components/GameOverlay";
 import { PlayerWell } from "../game/components/PlayerWell";
 import { useSoloGame } from "../game/hooks/useSoloGame";
+import { DgLabControlPanel } from "../dglab/DgLabControlPanel.tsx";
+import { useDgLabConfig } from "../dglab/useDgLabConfig.ts";
+import { useDgLabPenalty } from "../dglab/useDgLabPenalty.ts";
 
 export function SoloPage(): React.JSX.Element {
   const { config } = usePlayerConfig();
+  const dglabConfig = useDgLabConfig();
+  const dglab = useDgLabPenalty(dglabConfig.config);
   const sessionConfig = useRef(config).current;
-  const game = useSoloGame(sessionConfig);
+  const game = useSoloGame(sessionConfig, dglab.handleEvent);
   const snapshot = game.snapshot;
 
   if (snapshot === null) {
@@ -34,6 +39,7 @@ export function SoloPage(): React.JSX.Element {
           {...stats}
           combo={player.combo}
           backToBack={player.backToBack}
+          accessory={<DgLabControlPanel penalty={dglab} />}
         />
         <div className="arena-board-region">
           <PlayerWell
