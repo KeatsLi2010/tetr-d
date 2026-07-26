@@ -85,6 +85,9 @@ test("controller exposes Bluetooth connection and both channel readings", () => 
   });
   controller.handleEvent({ kind: "b2bBreak", amount: 1, source: "solo" });
   assert.ok(fake!.messages.some((message) => message.type === "clientMsg"));
+  const waveformIndex = fake!.messages.findIndex((message) => message.type === "clientMsg");
+  const strengthIndex = fake!.messages.findIndex((message) => message.type === 3);
+  assert.ok(waveformIndex >= 0 && strengthIndex >= 0 && waveformIndex < strengthIndex);
   controller.disarm();
   assert.equal(controller.status.armed, false);
   controller.dispose();

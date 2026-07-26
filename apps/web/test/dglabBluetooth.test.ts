@@ -90,6 +90,8 @@ test("Bluetooth transport writes V3 BF/B0 frames and parses B1 readings", async 
   assert.equal(transport.status, "paired");
   assert.deepEqual(Array.from(write.writes[0] ?? []), [0xBF, 30, 30, 0, 0, 0, 0]);
   transport.send({ type: 3, channel: 1, strength: 12 });
+  await flush();
+  assert.equal(write.writes.filter((item) => item[0] === 0xB0).length, 0);
   transport.send({ type: "clientMsg", channel: "A", durationMs: 110, message: 'A:["0C0C0C0C000A141E"]' });
   await flush();
   const frame = write.writes.find((item) => item[0] === 0xB0 && item[2] === 12 && item[8] === 0);

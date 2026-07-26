@@ -142,7 +142,9 @@ export class DgLabBluetoothTransport implements DgLabTransport {
       const strength = clampStrength(message.strength ?? 0);
       if (message.channel === 1) this.#strengthA = strength;
       if (message.channel === 2) this.#strengthB = strength;
-      this.#queueFrame();
+      // The controller loads the waveform immediately before setting strength.
+      // Avoid emitting an invalid empty-waveform B0 frame during that handoff.
+      if (this.#waveformPayload.length > 0) this.#queueFrame();
       return;
     }
     if (message.type === 4 && typeof message.message === "string" && message.message.startsWith("clear-")) {

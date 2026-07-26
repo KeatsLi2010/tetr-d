@@ -139,8 +139,8 @@ export class DgLabController {
     if (!this.#armed || this.#transport === null) return false;
     const strength = Math.min(this.#config.maxStrength, Math.max(1, this.#config.baseStrength));
     try {
-      this.#sendStrength(strength);
       this.#sendWaveform(Math.min(750, this.#config.baseDurationMs));
+      this.#sendStrength(strength);
       return true;
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 测试输出失败。");
@@ -184,8 +184,8 @@ export class DgLabController {
       return;
     }
     try {
-      this.#sendStrength(next.strength);
       this.#sendWaveform(next.durationMs);
+      this.#sendStrength(next.strength);
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 输出失败。");
       return;
