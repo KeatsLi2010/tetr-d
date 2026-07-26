@@ -1,4 +1,5 @@
 import type {
+  MatchFeedbackState,
   MatchServerMessage,
   PublicPlayer,
   RoomStatePayload
@@ -32,6 +33,7 @@ export interface DuelRoomView {
   readonly players: readonly NetworkPlayerState[];
   readonly result: MatchEndMessage | null;
   readonly frameAnchor: ServerFrameAnchor | null;
+  readonly feedback: Readonly<Record<string, MatchFeedbackState>>;
   readonly error: string | null;
 }
 

@@ -41,7 +41,33 @@ export type MatchClientMessage =
       readonly matchId: string;
       readonly lastStateSequence: number;
       readonly lastEventSequence: number;
+    }
+  | {
+      /**
+       * Ephemeral DG-LAB display state. This is deliberately separate from
+       * simulation snapshots so it is never persisted in a replay.
+       */
+      readonly type: "match.feedback";
+      readonly matchId: string;
+      readonly visible: boolean;
+      readonly connected: boolean;
+      readonly armed: boolean;
+      readonly channelA: MatchFeedbackChannel;
+      readonly channelB: MatchFeedbackChannel;
     };
+
+export interface MatchFeedbackChannel {
+  readonly strength: number;
+  readonly limit: number;
+}
+
+export interface MatchFeedbackState {
+  readonly visible: boolean;
+  readonly connected: boolean;
+  readonly armed: boolean;
+  readonly channelA: MatchFeedbackChannel;
+  readonly channelB: MatchFeedbackChannel;
+}
 
 export interface PendingGarbagePacket {
   readonly packetId: string;
@@ -216,6 +242,13 @@ export type MatchServerMessage =
       readonly playerId: string;
       readonly connected: boolean;
       readonly graceDeadlineServerTime?: number;
+    }
+  | {
+      /** Ephemeral DG-LAB state; never included in snapshots or replays. */
+      readonly type: "match.feedback";
+      readonly matchId: string;
+      readonly playerId: string;
+      readonly feedback: MatchFeedbackState;
     }
   | {
       readonly type: "resume.ok";

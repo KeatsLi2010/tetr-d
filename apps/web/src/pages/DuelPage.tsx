@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
+import type { MatchFeedbackState } from "@tetr-d/protocol";
 
 import { usePlayerConfig } from "../config/usePlayerConfig.ts";
 import { DuelArena } from "../game/components/DuelArena.tsx";
@@ -14,7 +15,14 @@ export function DuelPage(): React.JSX.Element {
   const dglabConfig = useDgLabConfig();
   const dglab = useDgLabPenalty(dglabConfig.config);
   const sessionConfig = useRef(config).current;
-  const duel = useDuelRoom(sessionConfig, dglab.handleEvent);
+  const localFeedback = useMemo<MatchFeedbackState>(() => ({
+    visible: dglab.status.connection === "paired",
+    connected: dglab.status.connection === "paired",
+    armed: dglab.status.armed,
+    channelA: dglab.status.channels.A,
+    channelB: dglab.status.channels.B
+  }), [dglab.status]);
+  const duel = useDuelRoom(sessionConfig, dglab.handleEvent, localFeedback);
   const roomCode = new URLSearchParams(window.location.search)
     .get("room")?.toUpperCase() ?? "";
 
@@ -47,6 +55,7 @@ export function DuelPage(): React.JSX.Element {
         onForfeit={duel.forfeit}
         onNextRound={duel.nextRound}
         players={duel.players}
+        feedback={duel.feedback}
         dglab={dglab}
         result={duel.result}
         room={duel.room}

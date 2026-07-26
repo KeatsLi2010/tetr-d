@@ -128,6 +128,28 @@ test("controller exposes Bluetooth connection and both channel readings", () => 
   controller.dispose();
 });
 
+test("controller adds penalty points, cancels newest points, and schedules decay", () => {
+  let now = 10_000;
+  let fake: FakeTransport | null = null;
+  const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true, cooldownMs: 250 }, {
+    createTransport: (onStatus) => { fake = new FakeTransport(onStatus); return fake; },
+    now: () => now
+  });
+  controller.connect();
+  assert.equal(controller.arm(), true);
+  controller.handleEvent({ kind: "b2bBreak", amount: 1, source: "solo" });
+  now += 300;
+  controller.handleEvent({ kind: "combo", amount: 1, source: "solo" });
+  const strengths = () => fake!.messages
+    .filter((message) => message.type === 3)
+    .map((message) => message.strength);
+  assert.deepEqual(strengths().slice(-2), [19, 22]);
+  now += 1;
+  controller.handleEvent({ kind: "attackCancelled", amount: 1, source: "duel" });
+  assert.equal(strengths().at(-1), 16);
+  controller.dispose();
+});
+
 test("arm reports the local feedback switch separately from Bluetooth pairing", () => {
   const controller = new DgLabController(DEFAULT_DGLAB_CONFIG);
   assert.equal(controller.arm(), false);

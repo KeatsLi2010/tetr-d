@@ -47,6 +47,9 @@ export class MatchMessageService {
       case "match.resyncRequest":
         this.#handleResync(context, message);
         return;
+      case "match.feedback":
+        this.#handleFeedback(context, message);
+        return;
       case "match.forfeit":
         this.#handleForfeit(context, message);
         return;
@@ -123,6 +126,48 @@ export class MatchMessageService {
         message.requestId
       );
     }
+  }
+
+  #handleFeedback(
+    context: AuthenticatedConnection,
+    message: Extract<MatchClientMessage, { readonly type: "match.feedback" }>
+  ): void {
+    const active = this.#activeMatch(context, message.matchId, true);
+    if (active === null) return;
+    const match = this.#matches.get(message.matchId);
+    const feedback = match === null
+      ? null
+      : this.#matches.feedback.receive(
+        active.playerId,
+        message,
+        match.view.participants
+      );
+    if (feedback === null) return;
+    const outbound: ServerMessage = {
+      type: "match.feedback",
+      matchId: message.matchId,
+      playerId: active.playerId,
+      feedback
+    };
+    for (const memberId of Object.keys(active.state.members)) this.#sendPlayer(memberId, outbound);
+  }
+
+  clearFeedback(playerId: string): void {
+    const session = this.#sessions.getByPlayerId(playerId);
+    if (session?.roomId === null || session?.roomId === undefined) return;
+    const room = this.#rooms.getById(session.roomId);
+    const matchId = room?.state.activeMatch?.matchId;
+    if (room === null || room === undefined || matchId === undefined) return;
+    const match = this.#matches.get(matchId);
+    const feedback = match === null ? null : this.#matches.feedback.clear(playerId, matchId);
+    if (feedback === null) return;
+    const outbound: ServerMessage = {
+      type: "match.feedback",
+      matchId,
+      playerId,
+      feedback
+    };
+    for (const memberId of Object.keys(room.state.members)) this.#sendPlayer(memberId, outbound);
   }
 
   #activeMatch(
@@ -229,5 +274,15 @@ export class MatchMessageService {
 
   #send(context: AuthenticatedConnection, message: ServerMessage): void {
     this.#connections.send(context, JSON.stringify(message));
+  }
+
+  #sendPlayer(playerId: string, message: ServerMessage): void {
+    const session = this.#sessions.getByPlayerId(playerId);
+    if (session === null || session.activeConnectionId === null) return;
+    this.#connections.send({
+      sessionId: session.sessionId,
+      connectionId: session.activeConnectionId,
+      connectionGeneration: session.connectionGeneration
+    }, JSON.stringify(message));
   }
 }

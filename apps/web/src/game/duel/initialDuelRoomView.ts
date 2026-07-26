@@ -8,5 +8,6 @@ export const INITIAL_DUEL_ROOM_VIEW: DuelRoomView = Object.freeze({
   players: Object.freeze([]),
   result: null,
   frameAnchor: null,
+  feedback: Object.freeze({}),
   error: null
 });

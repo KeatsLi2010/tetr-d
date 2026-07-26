@@ -28,6 +28,7 @@ interface QueuedCommand {
   readonly strength: number;
   readonly durationMs: number;
   readonly points: number;
+  readonly expiresAt: number;
 }
 
 type Listener = (status: DgLabStatus) => void;
@@ -53,7 +54,9 @@ export class DgLabController {
   #armed = false;
   #lastError: string | null = null;
   #queue: QueuedCommand[] = [];
+  #decayTimer: ReturnType<typeof setTimeout> | null = null;
   #activeTimer: ReturnType<typeof setTimeout> | null = null;
+  #lastSentStrength = 0;
   #lastEventAt = -Infinity;
 
   constructor(config: DgLabConfig = DEFAULT_DGLAB_CONFIG, options: DgLabControllerOptions = {}) {
@@ -67,7 +70,10 @@ export class DgLabController {
       connection: this.#connection,
       armed: this.#armed,
       channels: this.#channels,
-      queuedSeconds: this.#queue.reduce((sum, item) => sum + item.durationMs, 0) / 1_000,
+      queuedSeconds: this.#queue.reduce(
+        (sum, item) => sum + Math.max(0, item.expiresAt - this.#now()),
+        0
+      ) / 1_000,
       lastError: this.#lastError
     });
   }
@@ -170,18 +176,64 @@ export class DgLabController {
     const maxMs = this.#config.maxQueueSeconds * 1_000;
     const queuedMs = this.#queue.reduce((sum, item) => sum + item.durationMs, 0);
     if (queuedMs >= maxMs) return;
+    const durationMs = Math.min(command.durationMs, maxMs - queuedMs);
     this.#queue.push({
       points: command.points,
       strength: Math.min(command.strength, this.#config.maxStrength),
-      durationMs: Math.min(command.durationMs, maxMs - queuedMs)
+      durationMs,
+      expiresAt: now + durationMs
     });
     this.#publish();
-    if (this.#activeTimer === null) this.#pump();
+    this.#refreshOutput();
   }
 
   dispose(): void {
     this.disconnect();
     this.#listeners.clear();
+  }
+
+  /** Accumulate event points, then let each contribution expire naturally. */
+  #refreshOutput(): void {
+    if (this.#decayTimer !== null) clearTimeout(this.#decayTimer);
+    this.#decayTimer = null;
+    const now = this.#now();
+    this.#queue = this.#queue.filter((item) => item.expiresAt > now);
+    if (!this.#armed || this.#transport === null) {
+      this.#publish();
+      return;
+    }
+    const points = this.#queue.reduce((sum, item) => sum + item.points, 0);
+    const strength = points <= 0
+      ? 0
+      : Math.min(
+        this.#config.maxStrength,
+        Math.max(0, Math.round(this.#config.baseStrength + points * this.#config.strengthPerPoint))
+      );
+    try {
+      if (strength > 0) {
+        if (this.#lastSentStrength <= 0) {
+          this.#sendWaveform(this.#config.maxQueueSeconds * 1_000);
+        }
+        this.#sendStrength(strength);
+      } else if (this.#lastSentStrength > 0) {
+        this.#sendClear();
+      }
+      this.#lastSentStrength = strength;
+    } catch (error) {
+      this.#fail(error instanceof Error ? error.message : "DG-LAB output failed.");
+      return;
+    }
+    const nextExpiry = this.#queue.reduce(
+      (soonest, item) => Math.min(soonest, item.expiresAt),
+      Number.POSITIVE_INFINITY
+    );
+    if (Number.isFinite(nextExpiry)) {
+      this.#decayTimer = setTimeout(
+        () => this.#refreshOutput(),
+        Math.max(1, nextExpiry - now)
+      );
+    }
+    this.#publish();
   }
 
   #pump(): void {
@@ -217,14 +269,14 @@ export class DgLabController {
         this.#queue[this.#queue.length - 1] = Object.freeze({
           ...item,
           points: item.points - remaining,
-          durationMs: Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points))
+          durationMs: Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points)),
+          expiresAt: this.#now() + Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points))
         });
         remaining = 0;
       }
     }
     try {
-      this.#sendClear();
-      if (this.#queue.length > 0 && this.#activeTimer === null) this.#pump();
+      this.#refreshOutput();
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 取消输出失败。");
     }
@@ -254,9 +306,12 @@ export class DgLabController {
   }
 
   #stopOutput(clearDevice: boolean): void {
+    if (this.#decayTimer !== null) clearTimeout(this.#decayTimer);
+    this.#decayTimer = null;
     if (this.#activeTimer !== null) clearTimeout(this.#activeTimer);
     this.#activeTimer = null;
     this.#queue = [];
+    this.#lastSentStrength = 0;
     if (clearDevice && this.#transport !== null) {
       try { this.#sendClear(); } catch { /* disconnect/stop is best effort */ }
     }
