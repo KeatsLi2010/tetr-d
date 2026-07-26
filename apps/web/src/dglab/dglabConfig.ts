@@ -2,7 +2,7 @@ import type { DgLabConfig } from "./dglabTypes.ts";
 
 export const DGLAB_CONFIG_VERSION = 1 as const;
 export const DGLAB_CONFIG_STORAGE_KEY = "tetr-d.dglab-config.v1";
-export const DGLAB_ABSOLUTE_MAX_STRENGTH = 80;
+export const DGLAB_ABSOLUTE_MAX_STRENGTH = 200;
 
 export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   version: DGLAB_CONFIG_VERSION,
