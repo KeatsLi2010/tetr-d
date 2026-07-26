@@ -19,11 +19,15 @@ import type { DgLabTransportMessage } from "../src/dglab/index.ts";
 class FakeCharacteristic implements DgLabBluetoothCharacteristic {
   readonly writes: Uint8Array[] = [];
   readonly listeners = new Set<(event: { readonly target?: { readonly value?: DataView } }) => void>();
-  readonly writeValueWithResponse = async (value: BufferSource): Promise<void> => {
+  responseAttempts = 0;
+  readonly writeValueWithoutResponse = async (value: BufferSource): Promise<void> => {
     const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     this.writes.push(new Uint8Array(bytes));
   };
-  readonly writeValueWithoutResponse = this.writeValueWithResponse;
+  readonly writeValueWithResponse = async (_value: BufferSource): Promise<void> => {
+    this.responseAttempts += 1;
+    throw new Error("response write should not be used");
+  };
   async startNotifications(): Promise<DgLabBluetoothCharacteristic> { return this; }
   addEventListener(_type: "characteristicvaluechanged", listener: (event: { readonly target?: { readonly value?: DataView } }) => void): void { this.listeners.add(listener); }
   emit(bytes: number[]): void {
@@ -89,6 +93,7 @@ test("Bluetooth transport writes V3 BF/B0 frames and parses B1 readings", async 
   transport.connect();
   await flush();
   assert.equal(transport.status, "paired");
+  assert.equal(write.responseAttempts, 0);
   assert.deepEqual(Array.from(write.writes[0] ?? []), [0xBF, 30, 30, 0, 0, 0, 0]);
   transport.send({ type: 3, channel: 1, strength: 12 });
   await flush();

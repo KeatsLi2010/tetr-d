@@ -58,6 +58,30 @@ function browserAdapter(): DgLabBluetoothAdapter | undefined {
   return candidate;
 }
 
+function describeError(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    const name = error.name.trim();
+    const message = error.message.trim();
+    if (name.length > 0 && message.length > 0 && name !== "Error") return `${name}: ${message}`;
+    if (message.length > 0) return message;
+    if (name.length > 0) return name;
+  }
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as { readonly name?: unknown; readonly message?: unknown };
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    const message = typeof candidate.message === "string" ? candidate.message.trim() : "";
+    if (name.length > 0 && message.length > 0) return `${name}: ${message}`;
+    if (message.length > 0) return message;
+    if (name.length > 0) return name;
+  }
+  return fallback;
+}
+
+function secureContextDescription(): string {
+  const origin = typeof globalThis.location?.origin === "string" ? globalThis.location.origin : "unknown-origin";
+  return `origin=${origin}, secureContext=${globalThis.isSecureContext === true}`;
+}
+
 export function isWebBluetoothSupported(): boolean {
   return globalThis.isSecureContext === true && browserAdapter() !== undefined;
 }
@@ -118,7 +142,7 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     const generation = ++this.#generation;
     void this.#connect(generation).catch((error: unknown) => {
       if (generation !== this.#generation) return;
-      this.#setStatus("error", error instanceof Error ? error.message : "未知蓝牙错误");
+      this.#setStatus("error", describeError(error, `蓝牙连接失败（${secureContextDescription()}）`));
     });
   }
 
@@ -184,15 +208,39 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   }
 
   async #connect(generation: number): Promise<void> {
-    if (this.#adapter === undefined) throw new Error("当前浏览器不支持 Web Bluetooth，或页面不是 HTTPS。");
-    const device = await this.#adapter.requestDevice({ filters: [{ namePrefix: "47L121000" }], optionalServices: [DGLAB_BLUETOOTH_SERVICE_UUID] });
+    if (this.#adapter === undefined) throw new Error(`Web Bluetooth 不可用（${secureContextDescription()}）。请使用 HTTPS 或 http://localhost。`);
+    let device: DgLabBluetoothDevice;
+    try {
+      device = await this.#adapter.requestDevice({ filters: [{ namePrefix: "47L121000" }], optionalServices: [DGLAB_BLUETOOTH_SERVICE_UUID] });
+    } catch (error) {
+      throw new Error(`选择郊狼设备失败：${describeError(error, "浏览器未返回设备")}`);
+    }
     if (generation !== this.#generation) return;
-    const server = await device.gatt?.connect();
-    if (server === undefined) throw new Error("无法建立 DG-LAB GATT 连接。");
-    const service = await server.getPrimaryService(DGLAB_BLUETOOTH_SERVICE_UUID);
-    const write = await service.getCharacteristic(DGLAB_BLUETOOTH_WRITE_UUID);
-    const notify = await service.getCharacteristic(DGLAB_BLUETOOTH_NOTIFY_UUID);
-    await notify.startNotifications();
+    let server: DgLabBluetoothServer | undefined;
+    try {
+      server = await device.gatt?.connect();
+      if (server === undefined) throw new Error("设备没有可用的 GATT 服务。");
+    } catch (error) {
+      throw new Error(`建立 GATT 连接失败：${describeError(error, "浏览器拒绝了连接")}`);
+    }
+    let service: DgLabBluetoothService;
+    let write: DgLabBluetoothCharacteristic;
+    let notify: DgLabBluetoothCharacteristic;
+    try {
+      service = await server.getPrimaryService(DGLAB_BLUETOOTH_SERVICE_UUID);
+      write = await service.getCharacteristic(DGLAB_BLUETOOTH_WRITE_UUID);
+      notify = await service.getCharacteristic(DGLAB_BLUETOOTH_NOTIFY_UUID);
+    } catch (error) {
+      server.disconnect();
+      throw new Error(`读取郊狼 GATT 特征失败：${describeError(error, "找不到 0x180C/0x150A/0x150B")}`);
+    }
+    let notificationError: string | undefined;
+    try {
+      await notify.startNotifications();
+    } catch (error) {
+      // Notifications only power the intensity meter; output can still be used.
+      notificationError = `强度回读不可用：${describeError(error, "无法订阅 0x150B")}`;
+    }
     if (generation !== this.#generation) { server.disconnect(); return; }
     this.#device = device;
     this.#server = server;
@@ -200,8 +248,14 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     this.#notifyCharacteristic = notify;
     notify.addEventListener("characteristicvaluechanged", this.#onNotification);
     device.addEventListener("gattserverdisconnected", this.#onDisconnected);
-    await this.#writeBytes(softLimitFrame(this.#maxStrength));
+    try {
+      await this.#writeBytes(softLimitFrame(this.#maxStrength));
+    } catch (error) {
+      server.disconnect();
+      throw new Error(`写入 DG-LAB 安全上限失败：${describeError(error, "0x150A 写入被拒绝")}`);
+    }
     this.#setStatus("paired");
+    if (notificationError !== undefined) this.#onStatus("paired", null, notificationError);
     this.#emit({ type: "msg", message: `strength-0+0+${this.#maxStrength}+${this.#maxStrength}` });
   }
 
@@ -217,7 +271,7 @@ export class DgLabBluetoothTransport implements DgLabTransport {
 
   #queueWrite(bytes: Uint8Array): void {
     this.#writeQueue = this.#writeQueue.catch(() => undefined).then(() => this.#writeBytes(bytes)).catch((error: unknown) => {
-      if (this.#status !== "offline") this.#setStatus("error", error instanceof Error ? error.message : "蓝牙写入失败");
+      if (this.#status !== "offline") this.#setStatus("error", `蓝牙写入失败：${describeError(error, "设备拒绝了写入")}`);
     });
   }
 

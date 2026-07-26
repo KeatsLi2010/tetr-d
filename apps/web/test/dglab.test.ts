@@ -126,3 +126,10 @@ test("controller exposes Bluetooth connection and both channel readings", () => 
   assert.equal(controller.status.armed, false);
   controller.dispose();
 });
+
+test("arm reports the local feedback switch separately from Bluetooth pairing", () => {
+  const controller = new DgLabController(DEFAULT_DGLAB_CONFIG);
+  assert.equal(controller.arm(), false);
+  assert.match(controller.status.lastError ?? "", /启用反馈/);
+  controller.dispose();
+});

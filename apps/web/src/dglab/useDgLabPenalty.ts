@@ -5,6 +5,7 @@ import type { DgLabConfig, DgLabPenaltyEvent, DgLabStatus } from "./dglabTypes.t
 
 export interface DgLabPenaltyState {
   readonly status: DgLabStatus;
+  readonly enabled: boolean;
   readonly connect: () => void;
   readonly disconnect: () => void;
   readonly arm: () => boolean;
@@ -38,6 +39,7 @@ export function useDgLabPenalty(config: DgLabConfig): DgLabPenaltyState {
 
   return {
     status,
+    enabled: config.enabled,
     connect: useCallback(() => controller.connect(), [controller]),
     disconnect: useCallback(() => controller.disconnect(), [controller]),
     arm: useCallback(() => controller.arm(), [controller]),
@@ -46,4 +48,3 @@ export function useDgLabPenalty(config: DgLabConfig): DgLabPenaltyState {
     handleEvent: useCallback((event: DgLabPenaltyEvent) => controller.handleEvent(event), [controller])
   };
 }
-

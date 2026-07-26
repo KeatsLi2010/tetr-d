@@ -93,7 +93,10 @@ export class DgLabController {
     this.#connection = "connecting";
     const transport = this.#createTransport((status, _clientId, error) => {
       this.#connection = status;
-      if (status === "paired") this.#clearError();
+      if (status === "paired") {
+        if (error === undefined || error.length === 0) this.#clearError();
+        else this.#lastError = `蓝牙提示：${error}`;
+      }
       if (status === "error") this.#lastError = error === undefined || error.length === 0
         ? "蓝牙连接失败，请确认使用 HTTPS/Chrome 并选择郊狼 3.0。"
         : `蓝牙错误：${error}`;
@@ -115,8 +118,12 @@ export class DgLabController {
   }
 
   arm(): boolean {
-    if (!this.#config.enabled || this.#connection !== "paired") {
-      this.#fail("请先启用 DG-LAB 并选择蓝牙设备。");
+    if (!this.#config.enabled) {
+      this.#fail("请先在 DG-LAB 设置中勾选“启用反馈”。");
+      return false;
+    }
+    if (this.#connection !== "paired") {
+      this.#fail("请先选择蓝牙设备并等待状态变为“已连接”。");
       return false;
     }
     if (this.#config.maxStrength > DGLAB_ABSOLUTE_MAX_STRENGTH) {
