@@ -11,6 +11,7 @@ interface CharacteristicEvent {
 
 export interface DgLabBluetoothCharacteristic {
   readonly value?: DataView;
+  readonly writeValueWithoutResponse?: (value: BufferSource) => Promise<void>;
   readonly writeValue?: (value: BufferSource) => Promise<void>;
   readonly writeValueWithResponse?: (value: BufferSource) => Promise<void>;
   readonly startNotifications: () => Promise<DgLabBluetoothCharacteristic>;
@@ -208,7 +209,8 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     const characteristic = this.#writeCharacteristic;
     if (characteristic === null) throw new Error("DG-LAB 蓝牙写入特性不可用。");
     const value = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    if (characteristic.writeValueWithResponse !== undefined) await characteristic.writeValueWithResponse(value);
+    if (characteristic.writeValueWithoutResponse !== undefined) await characteristic.writeValueWithoutResponse(value);
+    else if (characteristic.writeValueWithResponse !== undefined) await characteristic.writeValueWithResponse(value);
     else if (characteristic.writeValue !== undefined) await characteristic.writeValue(value);
     else throw new Error("DG-LAB 蓝牙写入方法不可用。");
   }

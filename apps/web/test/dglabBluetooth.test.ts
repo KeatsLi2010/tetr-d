@@ -23,6 +23,7 @@ class FakeCharacteristic implements DgLabBluetoothCharacteristic {
     const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     this.writes.push(new Uint8Array(bytes));
   };
+  readonly writeValueWithoutResponse = this.writeValueWithResponse;
   async startNotifications(): Promise<DgLabBluetoothCharacteristic> { return this; }
   addEventListener(_type: "characteristicvaluechanged", listener: (event: { readonly target?: { readonly value?: DataView } }) => void): void { this.listeners.add(listener); }
   emit(bytes: number[]): void {
