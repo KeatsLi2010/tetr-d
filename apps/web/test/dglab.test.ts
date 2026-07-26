@@ -11,16 +11,15 @@ import {
 import type { DgLabPenaltyEvent, DgLabTransport, DgLabTransportMessage } from "../src/dglab/index.ts";
 
 class FakeTransport implements DgLabTransport {
-  status: "offline" | "connecting" | "waiting-bind" | "paired" | "error" = "offline";
+  status: "offline" | "connecting" | "paired" | "error" = "offline";
   readonly messages: DgLabTransportMessage[] = [];
   readonly listeners = new Set<(message: DgLabTransportMessage) => void>();
   readonly onStatus: (status: DgLabTransport["status"], clientId: string | null) => void;
   constructor(onStatus: (status: DgLabTransport["status"], clientId: string | null) => void) { this.onStatus = onStatus; }
-  connect(): void { this.status = "waiting-bind"; this.onStatus("waiting-bind", "client-1"); }
+  connect(): void { this.status = "paired"; this.onStatus("paired", null); }
   close(): void { this.status = "offline"; this.onStatus("offline", null); }
   send(message: DgLabTransportMessage): void { this.messages.push(message); }
   subscribe(listener: (message: DgLabTransportMessage) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  pair(): void { this.status = "paired"; this.onStatus("paired", "client-1"); }
   receive(message: DgLabTransportMessage): void { for (const listener of this.listeners) listener(message); }
 }
 
@@ -50,16 +49,14 @@ test("b2b break is stronger than a one-step combo", () => {
   assert.ok(broken.durationMs > combo.durationMs);
 });
 
-test("controller exposes pairing and both channel readings", () => {
+test("controller exposes Bluetooth connection and both channel readings", () => {
   let fake: FakeTransport | null = null;
-  const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true, wsUrl: "ws://relay:9999" }, {
-    createTransport: (_url, onStatus) => { fake = new FakeTransport(onStatus); return fake; },
+  const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true }, {
+    createTransport: (onStatus) => { fake = new FakeTransport(onStatus); return fake; },
     now: () => 10_000
   });
   controller.connect();
-  assert.equal(controller.status.connection, "waiting-bind");
-  assert.match(controller.status.pairingUrl ?? "", /DGLAB-SOCKET/);
-  fake!.pair();
+  assert.equal(controller.status.connection, "paired");
   assert.equal(controller.arm(), true);
   fake!.receive({ type: "msg", message: "strength-12+7+40+30" });
   assert.deepEqual(controller.status.channels, {

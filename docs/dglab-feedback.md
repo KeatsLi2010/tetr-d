@@ -4,9 +4,9 @@ DG-LAB 是可选的本地浏览器反馈模块。对局服务器只处理俄罗�
 
 ## 连接
 
-设置页的 WebSocket 地址对应 DG-LAB WebSocket 中继（推荐局域网 `wss://`，开发时可用 `ws://`）。点击“连接 / 生成二维码”后，浏览器作为第三方控制端连接中继并显示官方 SOCKET 配对 URL 的本地二维码。用 DG-LAB App 的 SOCKET 功能扫码，等待状态变为“已配对”，再手动点击 Arm。
+设置页使用 Web Bluetooth 直连郊狼 3.0。点击“选择蓝牙设备”后，在浏览器原生设备选择器中选择名称以 `47L121000` 开头的主机，连接成功后再手动点击 Arm。浏览器必须运行在 HTTPS 或 `localhost`，且需要支持 Web Bluetooth 的 Chrome / Edge；蓝牙权限由浏览器保存在本机。
 
-协议接线依据 DG-LAB 开源仓库：强度设置使用前端 `type: 3` 消息，波形使用 `clientMsg`，清空使用 `clear-1` / `clear-2`。Coyote 3.0 的 V3 波形每 100ms 写入四个 25ms 单元；内置 `breath` 和 `tide` 预设会编码为 8 字节 HEX 帧。浏览器不直接实现 BLE，设备仍由官方 App 转发。
+协议接线依据 DG-LAB 开源蓝牙协议 V3：服务 `0x180C`，写特性 `0x150A`，通知特性 `0x150B`。每 100ms 写入一条 20 字节 `B0` 指令，两通道强度和波形都在同一帧；每次连接先写入 `BF` 软上限。内置 `breath` 和 `tide` 预设按 8 字节 HEX 波形帧切片后直写设备，`B1` 通知用于刷新双通道强度显示。
 
 ## 惩罚积分
 
@@ -29,4 +29,4 @@ DG-LAB 是可选的本地浏览器反馈模块。对局服务器只处理俄罗�
 - 冷却和排队上限在浏览器本地执行；服务器无法远程触发或提高强度。
 - 这是非医疗用途的真实电刺激设备。只在自愿、清醒、可随时停止的情况下使用；不要在饮酒、驾驶、洗澡、睡眠或有禁忌症时使用。
 
-参考协议：[DG-LAB 蓝牙协议](https://github.com/dungeonlab-open/dglab-bluetooth-protocol)、[DG-LAB WebSocket 简易协议](https://github.com/dungeonlab-open/dglab-websocket-simple)。
+参考协议：[DG-LAB 蓝牙协议](https://github.com/dungeonlab-open/dglab-bluetooth-protocol)（[Coyote V3](https://github.com/dungeonlab-open/dglab-bluetooth-protocol/blob/main/coyote/v3/README.md)）。

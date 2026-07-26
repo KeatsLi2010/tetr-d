@@ -19,6 +19,20 @@ function Field({
   return <label className="dglab-field"><span>{label}</span>{children}<small>{help}</small></label>;
 }
 
+function ChoiceGroup<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  readonly value: T;
+  readonly options: readonly { readonly value: T; readonly label: string }[];
+  readonly onChange: (value: T) => void;
+}): React.JSX.Element {
+  return <div className="dglab-choice" role="radiogroup">
+    {options.map((option) => <button aria-checked={value === option.value} className={value === option.value ? "dglab-choice__button dglab-choice__button--active" : "dglab-choice__button"} key={option.value} onClick={() => onChange(option.value)} role="radio" type="button">{option.label}</button>)}
+  </div>;
+}
+
 export function DgLabSettingsPanel({
   config,
   saveState,
@@ -30,14 +44,14 @@ export function DgLabSettingsPanel({
   const range = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, Math.round(value)));
   return <section className="panel dglab-panel" id="dglab">
     <div className="panel__header">
-      <div><h2 className="panel__title">DG-LAB / 郊狼反馈</h2><p className="panel__description">仅保存在本地浏览器；对局只上传操作，不上传设备指令。必须扫码配对后手动 Arm。</p></div>
+      <div><h2 className="panel__title">DG-LAB / 郊狼反馈</h2><p className="panel__description">仅保存在本地浏览器；对局只上传操作，不上传设备指令。蓝牙连接后仍需手动 Arm。</p></div>
       <div className="dglab-panel__actions"><span className={`config-save-state config-save-state--${saveState}`}>{saveState === "saved" ? "已保存" : saveState === "saving" ? "保存中" : "保存失败"}</span><button className="button" onClick={onReset} type="button">恢复默认</button></div>
     </div>
     <div className="dglab-settings-grid">
       <Field label="启用反馈" help="默认关闭；游戏页仍需单独 Arm 才会输出。"><input checked={config.enabled} onChange={(event) => set("enabled", event.currentTarget.checked)} type="checkbox" /></Field>
-      <Field label="WebSocket 中继地址" help="例如 ws://192.168.10.207:9999；扫码由 DG-LAB App 完成。"><input onChange={(event) => set("wsUrl", event.currentTarget.value)} placeholder="ws://服务器:9999" spellCheck={false} type="url" value={config.wsUrl} /></Field>
-      <Field label="输出通道" help="A/B 双通道独立显示；当前惩罚输出到选中的通道。"><select onChange={(event) => set("channel", event.currentTarget.value as DgLabChannel)} value={config.channel}><option value="A">A 通道</option><option value="B">B 通道</option></select></Field>
-      <Field label="波形预设" help="官方 V3 100ms 分片格式，内置呼吸与潮汐两种低强度预设。"><select onChange={(event) => set("waveform", event.currentTarget.value as DgLabWaveformId)} value={config.waveform}><option value="breath">呼吸 / Breath</option><option value="tide">潮汐 / Tide</option></select></Field>
+      <Field label="连接方式" help="浏览器直接连接郊狼 3.0，不经过 WebSocket 中继；连接权限由浏览器保存。"><div className="dglab-device-mode"><span>Web Bluetooth</span><strong>本地直连</strong></div></Field>
+      <Field label="输出通道" help="A/B 双通道独立显示；当前惩罚输出到选中的通道。"><ChoiceGroup options={[{ value: "A" as const, label: "A 通道" }, { value: "B" as const, label: "B 通道" }]} value={config.channel} onChange={(value: DgLabChannel) => set("channel", value)} /></Field>
+      <Field label="波形预设" help="官方 V3 每 100ms 写入四个 25ms 单元，内置呼吸与潮汐两种低强度预设。"><ChoiceGroup options={[{ value: "breath" as const, label: "呼吸 / Breath" }, { value: "tide" as const, label: "潮汐 / Tide" }]} value={config.waveform} onChange={(value: DgLabWaveformId) => set("waveform", value)} /></Field>
       <Field label={`应用强度上限 ${config.maxStrength}`} help="应用硬上限 200；仍受设备软上限约束。"><input max={200} min={0} onChange={(event) => set("maxStrength", range(Number(event.currentTarget.value), 0, 200))} type="range" value={config.maxStrength} /></Field>
       <Field label={`基础强度 ${config.baseStrength}`} help="每个事件在此基础上按积分增加。"><input max={40} min={0} onChange={(event) => set("baseStrength", range(Number(event.currentTarget.value), 0, 40))} type="range" value={config.baseStrength} /></Field>
       <Field label={`事件冷却 ${config.cooldownMs}ms`} help="限制连续事件，避免短时间堆积输出。"><input max={5000} min={250} onChange={(event) => set("cooldownMs", range(Number(event.currentTarget.value), 250, 5000))} step={50} type="range" value={config.cooldownMs} /></Field>

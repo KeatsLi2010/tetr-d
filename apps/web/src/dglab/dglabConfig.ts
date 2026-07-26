@@ -7,7 +7,6 @@ export const DGLAB_ABSOLUTE_MAX_STRENGTH = 200;
 export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   version: DGLAB_CONFIG_VERSION,
   enabled: false,
-  wsUrl: "",
   waveform: "breath",
   channel: "A",
   maxStrength: 30,
@@ -42,15 +41,11 @@ function numberInRange(value: unknown, min: number, max: number): value is numbe
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
 
-function text(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length <= maxLength;
-}
-
 export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   const source = record(value);
   const weights = record(source?.weights);
   if (source?.version !== DGLAB_CONFIG_VERSION || weights === null) return null;
-  if (typeof source.enabled !== "boolean" || !text(source.wsUrl, 512)) return null;
+  if (typeof source.enabled !== "boolean") return null;
   if (source.waveform !== "breath" && source.waveform !== "tide") return null;
   if (source.channel !== "A" && source.channel !== "B") return null;
   if (!numberInRange(source.maxStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
@@ -66,7 +61,6 @@ export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   return Object.freeze({
     version: 1,
     enabled: source.enabled,
-    wsUrl: source.wsUrl.trim(),
     waveform: source.waveform,
     channel: source.channel,
     maxStrength: Math.floor(source.maxStrength),
