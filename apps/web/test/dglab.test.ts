@@ -5,8 +5,10 @@ import {
   DEFAULT_DGLAB_CONFIG,
   DgLabController,
   createPenaltyCommand,
+  duelStatePenaltyEvents,
   normalizeDgLabConfig,
   parseWaveformText,
+  soloLockPenaltyEvents,
   waveformPayload
 } from "../src/dglab/index.ts";
 import type { DgLabPenaltyEvent, DgLabTransport, DgLabTransportMessage } from "../src/dglab/index.ts";
@@ -67,6 +69,38 @@ test("b2b break is stronger than a one-step combo", () => {
   assert.ok(broken && combo);
   assert.ok(broken.strength > combo.strength);
   assert.ok(broken.durationMs > combo.durationMs);
+});
+
+test("feedback event amounts scale break and combo but not B2B continuation", () => {
+  const lock = {
+    piece: "T" as const,
+    lines: 1,
+    spin: "none" as const,
+    combo: 4,
+    backToBack: 0,
+    perfectClear: false,
+    clearedGarbageLines: 0,
+    cancelledGarbage: 0,
+    outgoingAttacks: [],
+    appliedGarbageHoles: []
+  };
+  const solo = soloLockPenaltyEvents(5, 2, lock);
+  assert.deepEqual(solo.map((event) => [event.kind, event.amount]), [["b2bBreak", 5], ["combo", 5]]);
+  const continued = soloLockPenaltyEvents(4, 2, { ...lock, backToBack: 5 });
+  assert.deepEqual(continued, [{ kind: "b2bContinue", amount: 1, source: "solo" }, { kind: "combo", amount: 5, source: "solo" }]);
+  const duel = duelStatePenaltyEvents({ backToBack: 5, combo: 2, pending: 0 }, { backToBack: 0, combo: 4, pending: 0 }, 0, 0);
+  assert.deepEqual(duel.map((event) => [event.kind, event.amount]), [["b2bBreak", 5], ["combo", 5]]);
+});
+
+test("penalty command keeps continuation fixed while scaling counts", () => {
+  const breakOne = createPenaltyCommand({ kind: "b2bBreak", amount: 1, source: "solo" }, DEFAULT_DGLAB_CONFIG);
+  const breakFive = createPenaltyCommand({ kind: "b2bBreak", amount: 5, source: "solo" }, DEFAULT_DGLAB_CONFIG);
+  const comboOne = createPenaltyCommand({ kind: "combo", amount: 1, source: "solo" }, DEFAULT_DGLAB_CONFIG);
+  const comboFive = createPenaltyCommand({ kind: "combo", amount: 5, source: "solo" }, DEFAULT_DGLAB_CONFIG);
+  const continueOne = createPenaltyCommand({ kind: "b2bContinue", amount: 1, source: "solo" }, DEFAULT_DGLAB_CONFIG);
+  assert.ok(breakOne && breakFive && comboOne && comboFive && continueOne);
+  assert.ok(breakFive.points > breakOne.points && comboFive.points > comboOne.points);
+  assert.equal(continueOne.points, DEFAULT_DGLAB_CONFIG.weights.b2bContinue);
 });
 
 test("controller exposes Bluetooth connection and both channel readings", () => {
