@@ -77,7 +77,7 @@ export interface DgLabTransportMessage {
 }
 
 export interface DgLabTransport {
-  readonly connect: () => void;
+  readonly connect: (forceChooser?: boolean) => void;
   readonly close: () => void;
   readonly send: (message: DgLabTransportMessage) => void;
   readonly setSafetyLimit?: (strength: number) => void;

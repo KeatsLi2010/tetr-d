@@ -1,4 +1,9 @@
 import type { DgLabConnectionStatus, DgLabTransport, DgLabTransportMessage } from "./dglabTypes.ts";
+import {
+  loadRememberedDgLabDevice,
+  saveRememberedDgLabDevice,
+  type DgLabDeviceStorage
+} from "./dglabDeviceStorage.ts";
 
 export const DGLAB_BLUETOOTH_SERVICE_UUID = "0000180c-0000-1000-8000-00805f9b34fb";
 export const DGLAB_BLUETOOTH_WRITE_UUID = "0000150a-0000-1000-8000-00805f9b34fb";
@@ -41,11 +46,13 @@ export interface DgLabBluetoothAdapter {
     readonly filters: readonly [{ readonly namePrefix: string }];
     readonly optionalServices: readonly [string];
   }) => Promise<DgLabBluetoothDevice>;
+  readonly getDevices?: () => Promise<readonly DgLabBluetoothDevice[]>;
 }
 
 export interface DgLabBluetoothTransportOptions {
   readonly maxStrength: number;
   readonly adapter?: DgLabBluetoothAdapter;
+  readonly storage?: DgLabDeviceStorage;
 }
 
 type StatusListener = (status: DgLabConnectionStatus, clientId: string | null, error?: string) => void;
@@ -56,6 +63,16 @@ const INVALID_WAVEFORM = Object.freeze({ frequencies: [10, 10, 10, 10], intensit
 function browserAdapter(): DgLabBluetoothAdapter | undefined {
   const candidate = (globalThis.navigator as Navigator & { readonly bluetooth?: DgLabBluetoothAdapter } | undefined)?.bluetooth;
   return candidate;
+}
+
+function browserStorage(): DgLabDeviceStorage | undefined {
+  try {
+    const storage = globalThis.localStorage;
+    if (storage === undefined) return undefined;
+    return storage;
+  } catch {
+    return undefined;
+  }
 }
 
 function describeError(error: unknown, fallback: string): string {
@@ -123,6 +140,7 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   #generation = 0;
   #maxStrength: number;
   readonly #adapter: DgLabBluetoothAdapter | undefined;
+  readonly #storage: DgLabDeviceStorage | undefined;
   readonly #onStatus: StatusListener;
   readonly #listeners = new Set<MessageListener>();
   readonly #onDisconnected = (): void => this.#handleDisconnected();
@@ -131,16 +149,17 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   constructor(options: DgLabBluetoothTransportOptions, onStatus: StatusListener = () => undefined) {
     this.#maxStrength = clampStrength(options.maxStrength);
     this.#adapter = options.adapter ?? browserAdapter();
+    this.#storage = options.storage ?? browserStorage();
     this.#onStatus = onStatus;
   }
 
   get status(): DgLabConnectionStatus { return this.#status; }
 
-  connect(): void {
+  connect(forceChooser = false): void {
     this.close();
     this.#setStatus("connecting");
     const generation = ++this.#generation;
-    void this.#connect(generation).catch((error: unknown) => {
+    void this.#connect(generation, forceChooser).catch((error: unknown) => {
       if (generation !== this.#generation) return;
       this.#setStatus("error", describeError(error, `蓝牙连接失败（${secureContextDescription()}）`));
     });
@@ -207,14 +226,9 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     return () => this.#listeners.delete(listener);
   }
 
-  async #connect(generation: number): Promise<void> {
+  async #connect(generation: number, forceChooser: boolean): Promise<void> {
     if (this.#adapter === undefined) throw new Error(`Web Bluetooth 不可用（${secureContextDescription()}）。请使用 HTTPS 或 http://localhost。`);
-    let device: DgLabBluetoothDevice;
-    try {
-      device = await this.#adapter.requestDevice({ filters: [{ namePrefix: "47L121000" }], optionalServices: [DGLAB_BLUETOOTH_SERVICE_UUID] });
-    } catch (error) {
-      throw new Error(`选择郊狼设备失败：${describeError(error, "浏览器未返回设备")}`);
-    }
+    const device = await this.#resolveDevice(forceChooser);
     if (generation !== this.#generation) return;
     let server: DgLabBluetoothServer | undefined;
     try {
@@ -255,8 +269,31 @@ export class DgLabBluetoothTransport implements DgLabTransport {
       throw new Error(`写入 DG-LAB 安全上限失败：${describeError(error, "0x150A 写入被拒绝")}`);
     }
     this.#setStatus("paired");
+    if (this.#storage !== undefined) {
+      saveRememberedDgLabDevice(this.#storage, { id: device.id, name: device.name ?? null });
+    }
     if (notificationError !== undefined) this.#onStatus("paired", null, notificationError);
     this.#emit({ type: "msg", message: `strength-0+0+${this.#maxStrength}+${this.#maxStrength}` });
+  }
+
+  async #resolveDevice(forceChooser: boolean): Promise<DgLabBluetoothDevice> {
+    if (!forceChooser && this.#adapter?.getDevices !== undefined && this.#storage !== undefined) {
+      const remembered = loadRememberedDgLabDevice(this.#storage);
+      if (remembered !== null) {
+        try {
+          const grantedDevices = await this.#adapter.getDevices();
+          const rememberedDevice = grantedDevices.find((device) => device.id === remembered.id);
+          if (rememberedDevice !== undefined) return rememberedDevice;
+        } catch {
+          // Permission stores can be unavailable in private browsing; use chooser.
+        }
+      }
+    }
+    try {
+      return await this.#adapter!.requestDevice({ filters: [{ namePrefix: "47L121000" }], optionalServices: [DGLAB_BLUETOOTH_SERVICE_UUID] });
+    } catch (error) {
+      throw new Error(`选择郊狼设备失败：${describeError(error, "浏览器未返回设备")}`);
+    }
   }
 
   async #writeBytes(bytes: Uint8Array): Promise<void> {

@@ -68,14 +68,25 @@ class FakeDevice implements DgLabBluetoothDevice {
 
 class FakeAdapter implements DgLabBluetoothAdapter {
   readonly device: FakeDevice;
+  requests = 0;
+  readonly grantedDevices: FakeDevice[] = [];
   constructor(write: FakeCharacteristic, notify: FakeCharacteristic) {
     this.device = new FakeDevice(new FakeServer(new FakeService(write, notify)));
   }
+  getDevices(): Promise<readonly DgLabBluetoothDevice[]> { return Promise.resolve(this.grantedDevices); }
   requestDevice(options: { readonly filters: readonly [{ readonly namePrefix: string }]; readonly optionalServices: readonly [string] }): Promise<DgLabBluetoothDevice> {
+    this.requests += 1;
     assert.equal(options.filters[0].namePrefix, "47L121000");
     assert.deepEqual(options.optionalServices, [DGLAB_BLUETOOTH_SERVICE_UUID]);
     return Promise.resolve(this.device);
   }
+}
+
+class MemoryStorage {
+  readonly values = new Map<string, string>();
+  getItem(key: string): string | null { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string): void { this.values.set(key, value); }
+  removeItem(key: string): void { this.values.delete(key); }
 }
 
 function flush(): Promise<void> {
@@ -115,4 +126,28 @@ test("Bluetooth transport writes V3 BF/B0 frames and parses B1 readings", async 
   transport.close();
   assert.equal(transport.status, "offline");
   assert.ok(statuses.includes("connecting") && statuses.includes("paired"));
+});
+
+test("Bluetooth transport restores a granted device from local metadata", async () => {
+  const storage = new MemoryStorage();
+  const firstAdapter = new FakeAdapter(new FakeCharacteristic(), new FakeCharacteristic());
+  const first = new DgLabBluetoothTransport({ maxStrength: 30, adapter: firstAdapter, storage });
+  first.connect();
+  await flush();
+  assert.equal(firstAdapter.requests, 1);
+  first.close();
+
+  const secondAdapter = new FakeAdapter(new FakeCharacteristic(), new FakeCharacteristic());
+  secondAdapter.grantedDevices.push(secondAdapter.device);
+  const second = new DgLabBluetoothTransport({ maxStrength: 30, adapter: secondAdapter, storage });
+  second.connect();
+  await flush();
+  assert.equal(second.status, "paired");
+  assert.equal(secondAdapter.requests, 0);
+  second.close();
+
+  second.connect(true);
+  await flush();
+  assert.equal(secondAdapter.requests, 1);
+  second.close();
 });

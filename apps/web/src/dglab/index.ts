@@ -1,5 +1,6 @@
 export * from "./dglabConfig.ts";
 export * from "./dglabBluetooth.ts";
+export * from "./dglabDeviceStorage.ts";
 export * from "./dglabController.ts";
 export * from "./dglabPolicy.ts";
 export * from "./dglabTypes.ts";

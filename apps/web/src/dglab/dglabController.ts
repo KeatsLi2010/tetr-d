@@ -87,7 +87,7 @@ export class DgLabController {
     return () => this.#listeners.delete(listener);
   }
 
-  connect(): void {
+  connect(forceChooser = false): void {
     this.#clearError();
     this.#disposeTransport();
     this.#connection = "connecting";
@@ -106,7 +106,7 @@ export class DgLabController {
     }, this.#config);
     this.#transport = transport;
     this.#unsubscribeTransport = transport.subscribe((message) => this.#receive(message));
-    transport.connect();
+    transport.connect(forceChooser);
     this.#publish();
   }
 
