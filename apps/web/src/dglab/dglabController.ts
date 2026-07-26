@@ -108,7 +108,7 @@ export class DgLabController {
         this.#pairingUrl = makePairingUrl(this.#config.wsUrl, clientId);
       }
       if (status !== "paired") this.#armed = false;
-      if (status === "offline" || status === "error") this.#stopOutput(false);
+      if (status === "offline" || status === "error") this.#stopOutput(true);
       this.#publish();
     });
     this.#transport = transport;
@@ -261,7 +261,7 @@ export class DgLabController {
     if (this.#activeTimer !== null) clearTimeout(this.#activeTimer);
     this.#activeTimer = null;
     this.#queue = [];
-    if (clearDevice && this.#transport?.status === "paired") {
+    if (clearDevice && this.#transport !== null) {
       try { this.#sendClear(); } catch { /* disconnect/stop is best effort */ }
     }
   }
