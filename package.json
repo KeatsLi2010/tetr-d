@@ -1,0 +1,27 @@
+{
+  "name": "tetr-d",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @tetr-d/web",
+    "test": "node --test",
+    "test:size": "node --test test/fileSize.test.ts",
+    "typecheck": "tsc && npm run typecheck --workspace @tetr-d/web",
+    "test:core": "node --test packages/game-core/test/srsPlus.test.ts packages/game-core/test/rotation.test.ts packages/game-core/test/sevenBag.test.ts",
+    "test:room": "node --test packages/room-core/test/lifecycle.test.ts packages/room-core/test/membership.test.ts packages/room-core/test/resilience.test.ts apps/server/test/roomActor.test.ts",
+    "dev:server": "node --env-file-if-exists=.env apps/server/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/ws": "^8.18.1",
+    "typescript": "^7.0.2"
+  }
+}

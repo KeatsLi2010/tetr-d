@@ -1,0 +1,43 @@
+:root {
+  color-scheme: dark;
+  --font-display: "Arial Narrow", "Aptos Display", "Segoe UI", sans-serif;
+  --font-body: Inter, "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --bg-void: #070910;
+  --bg-deep: #0a0d16;
+  --surface-1: rgba(17, 21, 34, 0.84);
+  --surface-2: rgba(25, 30, 47, 0.82);
+  --surface-3: rgba(33, 39, 59, 0.9);
+  --line-soft: rgba(196, 211, 255, 0.1);
+  --line: rgba(196, 211, 255, 0.18);
+  --line-strong: rgba(196, 211, 255, 0.3);
+  --text: #f4f6ff;
+  --text-soft: #b3bbd1;
+  --text-dim: #767f99;
+  --cyan: #5ee7ff;
+  --cyan-bright: #b5f6ff;
+  --violet: #9b87ff;
+  --violet-bright: #d8d0ff;
+  --lime: #b9f26c;
+  --orange: #ffb45f;
+  --danger: #ff718b;
+  --focus: #7aeaff;
+  --shadow-lg: 0 28px 90px rgba(0, 0, 0, 0.46);
+  --shadow-glow: 0 0 28px rgba(94, 231, 255, 0.14);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 30px;
+  --page-width: 1480px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

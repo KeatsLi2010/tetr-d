@@ -1,0 +1,94 @@
+@media (max-width: 1120px) {
+  .topbar {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .topbar__crumb {
+    display: none;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    padding: 0 16px 36px;
+  }
+
+  .topbar {
+    min-height: 70px;
+  }
+
+  .local-badge span {
+    display: none;
+  }
+
+  .page-grid {
+    display: block;
+    padding-top: 24px;
+  }
+
+  .settings-nav {
+    position: static;
+    margin-bottom: 22px;
+  }
+
+  .settings-nav__eyebrow,
+  .settings-nav__note,
+  .nav-item__hint {
+    display: none;
+  }
+
+  .settings-nav__items {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 3px;
+  }
+
+  .nav-item {
+    min-width: max-content;
+    min-height: 44px;
+    grid-template-columns: 26px auto;
+    padding: 5px 11px 5px 7px;
+  }
+
+  .nav-item__icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .page-heading {
+    display: grid;
+    gap: 20px;
+  }
+
+  .page-heading__actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .brand__edition {
+    display: none;
+  }
+
+  .topbar__status .icon-button {
+    display: none;
+  }
+
+  .page-heading h1 {
+    font-size: 38px;
+  }
+
+  .page-heading__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel__header {
+    align-items: start;
+    flex-direction: column;
+  }
+}
