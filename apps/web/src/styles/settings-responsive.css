@@ -1,0 +1,29 @@
+@media (max-width: 720px) {
+  .binding-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .handling-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .handling-row__symbol {
+    width: 44px;
+    height: 44px;
+  }
+
+  .handling-control {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 430px) {
+  .key-slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .keycap:last-child {
+    grid-column: 1 / -1;
+  }
+}

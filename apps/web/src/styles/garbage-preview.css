@@ -1,0 +1,69 @@
+.player-well__field {
+  position: relative;
+  min-width: 0;
+}
+
+.player-well__field--garbage {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 4px;
+}
+
+.garbage-preview {
+  position: relative;
+  z-index: 5;
+  width: 28px;
+  min-height: 100%;
+  pointer-events: none;
+}
+
+.garbage-preview__track {
+  position: absolute;
+  inset: 0 0 0 17px;
+  overflow: hidden;
+  border: 1px solid rgb(220 232 255 / 20%);
+  border-radius: 4px;
+  background: rgb(3 5 9 / 88%);
+}
+
+.garbage-preview__segment {
+  position: absolute;
+  right: 1px;
+  left: 1px;
+  border-radius: 2px;
+  border-top: 1px solid rgb(4 7 11 / 78%);
+  box-shadow: 0 0 9px currentColor;
+  transition:
+    bottom 70ms linear,
+    height 70ms linear,
+    background-color 45ms linear;
+}
+
+.garbage-preview__segment--ready {
+  animation: garbage-ready-pulse 480ms ease-in-out infinite alternate;
+}
+
+.garbage-preview__amount {
+  position: absolute;
+  left: 0;
+  bottom: 1px;
+  width: 15px;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  text-align: left;
+  text-shadow: 0 1px 3px #000;
+}
+
+@keyframes garbage-ready-pulse {
+  from { filter: brightness(.85); }
+  to { filter: brightness(1.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .garbage-preview__segment {
+    animation: none;
+    transition: none;
+  }
+}

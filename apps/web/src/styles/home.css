@@ -1,0 +1,199 @@
+.home-shell {
+  --color-bg: var(--bg-void);
+  --color-line: var(--line-soft);
+  --color-line-strong: var(--line);
+  --color-muted: var(--text-dim);
+  --color-lime: var(--lime);
+  --color-cyan: var(--cyan);
+  --color-text-strong: var(--text);
+  --color-text: var(--text-soft);
+  min-height: 100dvh;
+  padding: 0 clamp(18px, 4vw, 64px);
+  background:
+    radial-gradient(circle at 12% 10%, rgb(70 226 255 / 10%), transparent 30%),
+    radial-gradient(circle at 85% 30%, rgb(177 108 255 / 10%), transparent 35%),
+    var(--color-bg);
+}
+
+.home-header {
+  height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.home-header__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+}
+
+.status-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-lime);
+  box-shadow: 0 0 14px var(--color-lime);
+}
+
+.home-main {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(64px, 10vh, 120px) 0 56px;
+}
+
+.home-hero {
+  max-width: 760px;
+  margin-bottom: clamp(44px, 8vh, 84px);
+}
+
+.home-hero__eyebrow {
+  margin-bottom: 18px;
+  color: var(--color-cyan);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+
+.home-hero h1 {
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: clamp(46px, 7vw, 92px);
+  line-height: .93;
+  letter-spacing: -.06em;
+}
+
+.home-hero p {
+  max-width: 650px;
+  margin: 28px 0 0;
+  color: var(--color-text);
+  font-size: clamp(14px, 1.5vw, 17px);
+  line-height: 1.8;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 16px;
+}
+
+.mode-card {
+  position: relative;
+  min-height: 330px;
+  padding: 24px;
+  overflow: hidden;
+  color: var(--color-text);
+  text-decoration: none;
+  background: rgb(18 22 36 / 88%);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 18px;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+a.mode-card:hover {
+  transform: translateY(-4px);
+  border-color: rgb(87 232 255 / 48%);
+}
+
+.mode-card--primary {
+  background:
+    linear-gradient(145deg, rgb(87 232 255 / 12%), transparent 48%),
+    rgb(18 22 36 / 94%);
+}
+
+.mode-card--pending {
+  opacity: .58;
+}
+
+.mode-card--config {
+  background:
+    linear-gradient(145deg, rgb(181 108 255 / 10%), transparent 50%),
+    rgb(18 22 36 / 94%);
+}
+
+.mode-card__topline {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+
+.mode-card__state {
+  color: var(--color-cyan);
+}
+
+.mode-card__symbol {
+  margin-top: 54px;
+  color: var(--color-text-strong);
+  font-family: var(--font-mono);
+  font-size: 48px;
+  font-weight: 800;
+  letter-spacing: -.08em;
+}
+
+.mode-card--primary .mode-card__symbol {
+  color: var(--color-cyan);
+  text-shadow: 0 0 28px rgb(87 232 255 / 28%);
+}
+
+.mode-card h2 {
+  margin: 14px 0 8px;
+  color: var(--color-text-strong);
+  font-size: 23px;
+}
+
+.mode-card p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.mode-card__cta {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  left: 24px;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+  color: var(--color-text);
+  font-size: 12px;
+  border-top: 1px solid var(--color-line);
+}
+
+.home-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 22px 0 28px;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  border-top: 1px solid var(--color-line);
+}
+
+@media (max-width: 860px) {
+  .home-main { padding-top: 56px; }
+  .mode-grid { grid-template-columns: 1fr; }
+  .mode-card { min-height: 250px; }
+  .mode-card__symbol { margin-top: 34px; }
+}
+
+@media (max-width: 520px) {
+  .home-shell { padding-inline: 16px; }
+  .home-header { height: 68px; }
+  .home-header__status { font-size: 0; }
+  .home-hero { margin-bottom: 38px; }
+  .home-hero h1 { font-size: clamp(42px, 13vw, 58px); }
+  .home-footer { gap: 20px; }
+  .home-footer span:last-child { text-align: right; }
+}
