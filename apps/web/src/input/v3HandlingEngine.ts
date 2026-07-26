@@ -18,6 +18,7 @@ import type {
   ExpandedPlayerAction,
   ShiftDirection
 } from "./playerActions.ts";
+import { GenerationInputBuffer } from "./generationInputBuffer.ts";
 
 export type {
   HandlingEngineOptions,
@@ -48,16 +49,14 @@ function engineConfig(config: PlayerConfig): EnginePlayerConfig {
   };
 }
 
-/**
- * IRS/IHS modes are intentionally retained for the future piece-generation
- * controller; this engine currently expands active-piece keyboard handling.
- */
 export class HandlingEngine {
   readonly #core: CoreHandlingEngine;
+  readonly #generation: GenerationInputBuffer;
 
   constructor(config: PlayerConfig, options: HandlingEngineOptions = {}) {
     const normalized = normalizePlayerConfig(config);
     if (normalized === null) throw new TypeError("Invalid player config.");
+    this.#generation = new GenerationInputBuffer(normalized);
     this.#core = new CoreHandlingEngine(engineConfig(normalized), options);
   }
 
@@ -66,26 +65,36 @@ export class HandlingEngine {
   }
 
   keyDown(input: KeyDownInput): readonly ExpandedPlayerAction[] {
-    return this.#core.keyDown(input);
+    this.#generation.keyDown(input.code, input.repeat === true);
+    return this.#expand(this.#core.keyDown(input));
   }
 
   keyUp(input: KeyUpInput): readonly ExpandedPlayerAction[] {
-    return this.#core.keyUp(input);
+    this.#generation.keyUp(input.code);
+    return this.#expand(this.#core.keyUp(input));
   }
 
   advance(toMs: number): readonly ExpandedPlayerAction[] {
-    return this.#core.advance(toMs);
+    return this.#expand(this.#core.advance(toMs));
   }
 
   notifyPieceSpawned(
     atMs: number,
     cause: PieceSpawnCause = "input"
   ): readonly ExpandedPlayerAction[] {
-    return this.#core.notifyPieceSpawned(atMs, cause);
+    const generated = this.#generation.spawned(cause);
+    return Object.freeze([
+      ...generated,
+      ...this.#core.notifyPieceSpawned(atMs, cause)
+    ]);
   }
 
   blur(atMs: number): void {
+    this.#generation.clear();
     this.#core.blur(atMs);
   }
-}
 
+  #expand(actions: readonly ExpandedPlayerAction[]): readonly ExpandedPlayerAction[] {
+    return this.#generation.expand(actions);
+  }
+}

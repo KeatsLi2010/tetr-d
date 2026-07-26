@@ -101,6 +101,10 @@ const matchTickRateHz = parseMatchTickRateHz(
 const webRoot = existingDirectory(
   resolve(process.cwd(), "apps", "web", "dist")
 );
+const replayRootDirectory = resolve(
+  process.env.MATCH_REPLAY_DIR
+    ?? resolve(process.cwd(), "data", "replays")
+);
 
 const app = createTetrServer({
   buildId,
@@ -111,6 +115,7 @@ const app = createTetrServer({
   maxConnections,
   maxConnectionsPerIp,
   matchTickRateHz,
+  replayRootDirectory,
   shutdownGraceMs,
   ...(sessionHmacKey === undefined ? {} : { sessionHmacKey }),
   ...(webRoot === undefined ? {} : { webRoot }),

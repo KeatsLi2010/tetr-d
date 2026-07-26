@@ -21,6 +21,7 @@ $keyFile = Join-Path $deploymentRoot 'secrets\session-hmac.key'
 $originsFile = Join-Path $deploymentRoot 'secrets\allowed-origins.txt'
 $hostsFile = Join-Path $deploymentRoot 'secrets\allowed-hosts.txt'
 $logsRoot = Join-Path $deploymentRoot 'logs'
+$replayRoot = Join-Path $deploymentRoot 'data\replays'
 
 foreach ($requiredFile in @($currentFile, $keyFile, $originsFile, $hostsFile)) {
   if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -63,10 +64,10 @@ function Test-ExpectedHealth {
     return (
       $health.ok -eq $true -and
       $health.buildId -eq $releaseId -and
-      $health.protocolVersion -eq 3 -and
+      $health.protocolVersion -eq 4 -and
       $health.rotationSystemVersion -eq 'srs-plus-v1' -and
       $health.pieceSequenceVersion -eq 'shared-seven-bag-v1' -and
-      $health.rulesetVersion -eq 'versus-srs-plus-tetrio-s2-v2' -and
+      $health.rulesetVersion -eq 'versus-srs-plus-tetrio-s2-v3' -and
       $health.matchTickRateHz -eq $MatchTickRateHz
     )
   } catch {
@@ -89,6 +90,7 @@ if ($listeners.Count -ne 0) {
 }
 
 New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $replayRoot -Force | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stdoutPath = Join-Path $logsRoot "$stamp.out.log"
 $stderrPath = Join-Path $logsRoot "$stamp.err.log"
@@ -104,6 +106,7 @@ $env:SESSION_HMAC_KEY = $sessionKey
 $env:MATCH_TICK_RATE_HZ = $MatchTickRateHz.ToString(
   [Globalization.CultureInfo]::InvariantCulture
 )
+$env:MATCH_REPLAY_DIR = $replayRoot
 
 $process = Start-Process `
   -FilePath $nodePath `

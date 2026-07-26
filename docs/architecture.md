@@ -2,15 +2,15 @@
 
 ## 目标与边界
 
-目标是构建一个服务端权威、可重连、可审计的现代俄罗斯方块 1v1 系统。旋转系统固定为 `srs-plus-v1`；当前冻结的对战规则版本为 `versus-srs-plus-tetrio-s2-v2`。
+目标是构建一个服务端权威、可重连、可审计的现代俄罗斯方块 1v1 系统。旋转系统固定为 `srs-plus-v1`；当前冻结的对战规则版本为 `versus-srs-plus-tetrio-s2-v3`。
 
-服务端已具备共享 7-Bag、固定步进 Match Coordinator、双方棋盘模拟、攻击/垃圾、KO、snapshot 和 `match.end`。浏览器已具备本地配置 UI、Handling 引擎和非阻塞输入队列；完整比赛棋盘、预测校正、delta 优化和持久回放仍属于后续阶段。
+服务端已具备共享 7-Bag、固定步进 Match Coordinator、双方棋盘模拟、攻击/垃圾、KO、snapshot/delta、IRS/IHS、持久回放和 `match.end`。浏览器已具备本地配置 UI、Handling 引擎、低延迟预测与分层 Canvas 渲染。
 
 ## 模块
 
 ```mermaid
 flowchart LR
-  Client["Browser / test client"] -->|"JSON, tetr-d.v3"| Gateway["WebSocket gateway"]
+  Client["Browser / test client"] -->|"JSON, tetr-d.v4"| Gateway["WebSocket gateway"]
   Config["Local-only config + Handling"] --> Client
   Gateway --> Session["Guest session + generation fence"]
   Gateway --> RoomManager["Room manager"]
@@ -90,7 +90,7 @@ bag 1: [J, Z, T, O, I, L, S]
 
 ## 连接与重连
 
-1. 客户端首包发送 `hello(protocolVersion=3, buildId, resumeToken?)`。
+1. 客户端首包发送 `hello(protocolVersion=4, buildId, resumeToken?)`。
 2. 服务端返回 `welcome`，游客认证后返回 `auth.ok` 与 resume token。
 3. 每次成功 resume 都原子消费旧 token、发行新 token，并增加 connection generation。
 4. ConnectionHub 只接受当前 generation；旧 Socket 的迟到消息和 close 事件不会改变房间。
@@ -107,4 +107,4 @@ bag 1: [J, Z, T, O, I, L, S]
 
 ## 后续边界
 
-服务端 Coordinator 已负责可配置固定 tick、输入 epoch/sequence、具体操作验证、锁定与消行、攻击/垃圾、KO、状态 hash、snapshot 和 `match.end`。下一阶段重点是浏览器比赛棋盘、完整局面预测、snapshot 回滚重放、Safe Lock/IRS/IHS 最终接线、可选 delta、持久回放，以及真实双客户端下的重连、过载和发布回滚演练；这些完成前仍只应按 staging 部署。
+服务端 Coordinator 已负责可配置固定 tick、输入 epoch/sequence、具体操作验证、锁定与消行、攻击/垃圾、KO、状态 hash、snapshot/delta、IRS/IHS 和 `match.end`。回放以哈希链 JSONL 持久化，`.partial` 文件不会被误报为完整回放；部署时回放目录位于不可变 release 之外。

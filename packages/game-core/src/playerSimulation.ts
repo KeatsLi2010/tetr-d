@@ -13,7 +13,7 @@ import {
   pendingGarbageAmount,
   type SimulationGarbagePacket
 } from "./garbageQueue.ts";
-import { findPieceSpawnPlacement } from "./pieceSpawn.ts";
+import { PlayerPieceGeneration } from "./playerPieceGeneration.ts";
 import type {
   PlayerFrameResult,
   PlayerLockSummary,
@@ -58,6 +58,7 @@ export class PlayerSimulation {
   #allowClutchLift = false;
   #frameLocks: PlayerLockSummary[] = [];
   #frameSpawns: PlayerPieceSpawnEvent[] = [];
+  readonly #generation = new PlayerPieceGeneration();
 
   constructor(options: PlayerSimulationOptions) {
     if (options.playerId.length < 1 || options.playerId.length > 128) {
@@ -68,7 +69,8 @@ export class PlayerSimulation {
     this.#pieces = options.pieces;
     this.#nextAttackRoundingRoll = options.nextAttackRoundingRoll;
     this.#board = options.initialBoard ?? createBoard();
-    this.#spawn(this.#pieces.draw());
+    this.#requestSpawn(this.#pieces.draw(), null, false, false);
+    this.#finishGeneration();
   }
 
   get view(): PlayerSimulationView {
@@ -122,11 +124,18 @@ export class PlayerSimulation {
     this.#frameLocks = [];
     this.#frameSpawns = [];
     if (!this.#toppedOut) {
-      for (const action of actions) this.#applyAction(action, serverFrame);
+      for (const action of actions) {
+        const disposition = this.#generation.consume(action);
+        if (disposition === "buffered") continue;
+        if (disposition === "finish") this.#finishGeneration();
+        this.#applyAction(action, serverFrame);
+      }
+      this.#finishGeneration();
       if (!this.#toppedOut && this.#active !== null) {
         this.#repeatHorizontal();
         this.#applyGravity();
         this.#advanceLock(serverFrame);
+        this.#finishGeneration();
       }
     }
     const outgoingAttacks = this.#frameLocks.flatMap(
@@ -303,12 +312,8 @@ export class PlayerSimulation {
     const replacement = this.#hold ?? this.#pieces.draw();
     this.#hold = current;
     this.#canHold = false;
-    this.#spawn(
-      replacement,
-      false,
-      "hold",
-      this.#allowClutchLift
-    );
+    this.#requestSpawn(replacement, "hold", this.#allowClutchLift, false);
+    this.#finishGeneration();
   }
 
   #lock(
@@ -340,42 +345,53 @@ export class PlayerSimulation {
     this.#frameLocks.push(resolution.summary);
     this.#allowClutchLift = resolution.summary.lines > 0;
     if (!this.#toppedOut) {
-      this.#spawn(
+      this.#requestSpawn(
         this.#pieces.draw(),
-        true,
         spawnCause,
-        this.#allowClutchLift
+        this.#allowClutchLift,
+        true
       );
     }
   }
 
-  #spawn(
+  #requestSpawn(
     kind: PieceKind,
-    resetHold = true,
-    cause?: PlayerPieceSpawnCause,
-    allowClutchLift = false
+    cause: PlayerPieceSpawnCause | null,
+    allowClutchLift: boolean,
+    allowBufferedHold: boolean
   ): void {
-    const placement = findPieceSpawnPlacement({
+    this.#generation.request(kind, cause !== "hold", cause, allowClutchLift, allowBufferedHold);
+  }
+
+  #finishGeneration(): void {
+    const generated = this.#generation.finish({
       board: this.#board,
-      kind,
+      heldKind: this.#hold,
       spawnX: this.#rules.spawnX,
       spawnY: this.#rules.spawnY,
-      allowClutchLift
+      pieces: this.#pieces
     });
-    this.#active = placement?.piece ?? null;
+    if (generated === null) return;
+    this.#active = generated.active;
+    this.#hold = generated.hold;
+    this.#canHold = generated.canHold;
     this.#toppedOut = this.#active === null;
-    if (resetHold) this.#canHold = true;
-    if (cause !== undefined && this.#active !== null) {
+    if (generated.cause !== null && this.#active !== null) {
       this.#frameSpawns.push(Object.freeze({
-        cause,
-        piece: kind,
-        liftedRows: placement?.liftedRows ?? 0
+        cause: generated.cause,
+        piece: this.#active.kind,
+        liftedRows: generated.liftedRows
       }));
     }
     this.#gravityRemainder = 0;
     this.#lockFrames = 0;
     this.#lockResets = 0;
-    this.#lastRotation = null;
+    this.#lastRotation = generated.usedIrs && generated.attemptedIrs !== null
+      && generated.irsKickIndex !== null
+      ? {
+        direction: generated.attemptedIrs,
+        kickIndex: generated.irsKickIndex
+      }
+      : null;
   }
-
 }

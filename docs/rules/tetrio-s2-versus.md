@@ -1,6 +1,6 @@
 # TETR.IO Season 2 双人攻击规则档案
 
-项目规则版本：`versus-srs-plus-tetrio-s2-v2`。
+项目规则版本：`versus-srs-plus-tetrio-s2-v3`。
 
 本档案用于冻结可重放的服务器行为。TETR.IO 并未公开服务器源码；因此这里的“严格参考”指公开规则可确认的部分逐项实现和测试，而不是声称得到私有实现的逐字节副本。
 

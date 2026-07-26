@@ -161,30 +161,35 @@ function drawActiveCell(
   context.globalAlpha = 1;
 }
 
-export function renderBoardCanvas(
+function beginLayer(
   context: CanvasRenderingContext2D,
-  model: BoardRenderModel,
   width: number,
   height: number,
-  displayRows = model.visibleRows
-): void {
+  displayRows: number
+): BoardViewportLayout | null {
   context.clearRect(0, 0, width, height);
-  if (width <= 0 || height <= 0) return;
+  return width <= 0 || height <= 0
+    ? null
+    : boardViewportLayout(width, height, displayRows);
+}
 
-  const layout = boardViewportLayout(width, height, displayRows);
+function drawStaticContent(
+  context: CanvasRenderingContext2D,
+  model: BoardRenderModel,
+  layout: BoardViewportLayout,
+  displayRows: number
+): void {
   context.fillStyle = BOARD_BACKGROUND;
   context.fillRect(layout.left, layout.top, layout.width, layout.height);
-
   context.save();
   context.beginPath();
   context.rect(layout.left, layout.top, layout.width, layout.height);
   context.clip();
   if (displayRows > VISIBLE_BOARD_HEIGHT) {
-    const ceilingY = (
+    const ceilingY =
       layout.top +
       layout.height -
-      VISIBLE_BOARD_HEIGHT * layout.cell
-    );
+      VISIBLE_BOARD_HEIGHT * layout.cell;
     context.fillStyle = BUFFER_COLOR;
     context.fillRect(
       layout.left,
@@ -200,18 +205,10 @@ export function renderBoardCanvas(
     context.stroke();
   }
   drawGrid(context, layout);
-
   for (const cell of model.locked) {
     drawLockedCell(context, layout, cell, model.visibleRows);
   }
-  for (const cell of model.ghost) {
-    drawGhostCell(context, layout, cell, model.visibleRows);
-  }
-  for (const cell of model.active) {
-    drawActiveCell(context, layout, cell, model.visibleRows);
-  }
   context.restore();
-
   context.strokeStyle = BORDER_COLOR;
   context.lineWidth = Math.max(1, layout.cell * 0.065);
   context.strokeRect(
@@ -220,4 +217,74 @@ export function renderBoardCanvas(
     layout.width,
     layout.height
   );
+}
+
+function drawDynamicContent(
+  context: CanvasRenderingContext2D,
+  model: BoardRenderModel,
+  layout: BoardViewportLayout
+): void {
+  context.save();
+  context.beginPath();
+  context.rect(layout.left, layout.top, layout.width, layout.height);
+  context.clip();
+  for (const cell of model.ghost) {
+    drawGhostCell(context, layout, cell, model.visibleRows);
+  }
+  for (const cell of model.active) {
+    drawActiveCell(context, layout, cell, model.visibleRows);
+  }
+  context.restore();
+}
+
+export function renderBoardStaticLayer(
+  context: CanvasRenderingContext2D,
+  model: BoardRenderModel,
+  width: number,
+  height: number,
+  displayRows = model.visibleRows
+): void {
+  const layout = beginLayer(
+    context,
+    width,
+    height,
+    displayRows
+  );
+  if (layout !== null) {
+    drawStaticContent(context, model, layout, displayRows);
+  }
+}
+
+export function renderBoardDynamicLayer(
+  context: CanvasRenderingContext2D,
+  model: BoardRenderModel,
+  width: number,
+  height: number,
+  displayRows = model.visibleRows
+): void {
+  const layout = beginLayer(
+    context,
+    width,
+    height,
+    displayRows
+  );
+  if (layout !== null) drawDynamicContent(context, model, layout);
+}
+
+export function renderBoardCanvas(
+  context: CanvasRenderingContext2D,
+  model: BoardRenderModel,
+  width: number,
+  height: number,
+  displayRows = model.visibleRows
+): void {
+  const layout = beginLayer(
+    context,
+    width,
+    height,
+    displayRows
+  );
+  if (layout === null) return;
+  drawStaticContent(context, model, layout, displayRows);
+  drawDynamicContent(context, model, layout);
 }

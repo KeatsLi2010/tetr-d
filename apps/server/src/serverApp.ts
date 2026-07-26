@@ -38,6 +38,7 @@ export interface TetrServerOptions {
   readonly maxConnections?: number;
   readonly maxConnectionsPerIp?: number;
   readonly matchTickRateHz?: number;
+  readonly replayRootDirectory?: string;
   readonly shutdownGraceMs?: number;
   readonly webRoot?: string;
   readonly onError?: (error: unknown) => void;
@@ -140,6 +141,10 @@ export function createTetrServer(
     sessions,
     connections,
     tickRateHz: matchTickRateHz,
+    ...(options.replayRootDirectory === undefined
+      ? {} : { replayRootDirectory: options.replayRootDirectory }),
+    serverVersion: buildId,
+    now,
     getRoomState(roomId) {
       return rooms.getById(roomId)?.state ?? null;
     },

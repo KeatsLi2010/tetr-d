@@ -9,6 +9,7 @@ import {
   SERVER_FRAME_EXTRAPOLATION_MS,
   type ServerFrameAnchor
 } from "../duel/garbagePreviewModel.ts";
+import { shouldAnimateGarbagePreview } from "../render/garbagePreviewAnimation.ts";
 
 export interface GarbagePreviewBarProps {
   readonly packets: readonly PendingGarbagePacket[];
@@ -28,7 +29,9 @@ export function GarbagePreviewBar({
   const [nowMs, setNowMs] = useState(() => performance.now());
 
   useEffect(() => {
-    if (packets.length === 0) return undefined;
+    if (!shouldAnimateGarbagePreview(packets, frameAnchor.serverFrame)) {
+      return undefined;
+    }
     let animationFrame = 0;
     const update = (timestamp: number) => {
       setNowMs(timestamp);
@@ -41,7 +44,7 @@ export function GarbagePreviewBar({
     };
     animationFrame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(animationFrame);
-  }, [frameAnchor.receivedAtMs, packets.length]);
+  }, [frameAnchor.receivedAtMs, frameAnchor.serverFrame, packets]);
 
   const model = useMemo(() => {
     const estimatedFrame = estimateServerFrame(

@@ -87,7 +87,7 @@ LAN 验证阶段可以使用 `http://192.168.10.207:4180` 和 `ws://...`，Windo
 - room actor/runtime/outbox 与真实两客户端集成测试；
 - 同一局唯一共享 7-Bag、双方独立游标、commitment 与 14 块同窗测试；
 - 可配置固定步进 Match Coordinator（默认 240 Hz）、服务端棋盘/输入/攻击/垃圾/终局和 30 Hz snapshot 测试；
-- `versus-srs-plus-tetrio-s2-v2` 规则版本与独立攻击、垃圾洞随机域；
+- `versus-srs-plus-tetrio-s2-v3` 规则版本与独立攻击、垃圾洞随机域；
 - 单次轮换 resume token、connection generation 与重连房间状态；
 - LAN 内外健康检查、Origin 拒绝测试和真实双客户端 `match.start` smoke test；
 - 双人棋盘、本地即时预测、权威快照校正、同包显示、双方受击预览条与 B2B 状态；

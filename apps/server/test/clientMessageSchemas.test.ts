@@ -7,10 +7,10 @@ test("strict schemas accept the supported handshake and room commands", () => {
   assert.deepEqual(
     parseClientMessage({
       type: "hello",
-      protocolVersion: 3,
+      protocolVersion: 4,
       buildId: "test"
     }),
-    { type: "hello", protocolVersion: 3, buildId: "test" }
+    { type: "hello", protocolVersion: 4, buildId: "test" }
   );
   assert.ok(
     parseClientMessage({

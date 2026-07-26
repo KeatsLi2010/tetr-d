@@ -7,6 +7,7 @@ import type { PieceKind } from "../../../../packages/game-core/src/types.ts";
 import type {
   InputAction,
   InputAcknowledgement,
+  MatchEvent,
   MatchServerMessage
 } from "../../../../packages/protocol/src/matchMessages.ts";
 import {
@@ -20,7 +21,8 @@ import {
 } from "./matchInputQueue.ts";
 import {
   createMatchRandomSeeds,
-  MatchRandomStream
+  MatchRandomStream,
+  type MatchRandomSeeds
 } from "./matchRandom.ts";
 import type {
   MatchCoordinatorOptions,
@@ -35,6 +37,8 @@ import {
 } from "./matchCoordinatorHelpers.ts";
 import { selfStateHash } from "./matchProjection.ts";
 
+const MAX_RETAINED_EVENTS = 2_048;
+
 export class MatchCoordinator {
   readonly #matchId: string;
   readonly #roomId: string;
@@ -47,7 +51,11 @@ export class MatchCoordinator {
   readonly #simulations: readonly [PlayerSimulation, PlayerSimulation];
   readonly #startWindow: readonly PieceKind[];
   readonly #holeRandom: MatchRandomStream;
+  readonly #randomSeeds: MatchRandomSeeds;
+  readonly #events: MatchEvent[] = [];
   readonly #onSnapshot: (coordinator: MatchCoordinatorView) => void;
+  readonly #onAppliedFrame: NonNullable<MatchCoordinatorOptions["onAppliedFrame"]>;
+  readonly #onControlFrame: NonNullable<MatchCoordinatorOptions["onControlFrame"]>;
   readonly #onFinished: (result: MatchFinishedResult) => void;
   readonly #onError: (error: unknown) => void;
   #serverFrame = 0;
@@ -66,17 +74,20 @@ export class MatchCoordinator {
     this.#tickRateHz = options.tickRateHz;
     this.#snapshotRateHz = options.snapshotRateHz ?? 30;
     this.#onSnapshot = options.onSnapshot ?? (() => undefined);
+    this.#onAppliedFrame = options.onAppliedFrame ?? (() => undefined);
+    this.#onControlFrame = options.onControlFrame ?? (() => undefined);
     this.#onFinished = options.onFinished ?? (() => undefined);
     this.#onError = options.onError ?? (() => undefined);
     this.#startWindow = Object.freeze([
       ...this.#sequence.peek(this.#participants[0], 14).pieces
     ]);
     const seeds = options.randomSeeds ?? createMatchRandomSeeds();
+    this.#randomSeeds = Object.freeze({ ...seeds });
     const attackRandom = [
-      new MatchRandomStream(seeds.firstAttack),
-      new MatchRandomStream(seeds.secondAttack)
+      new MatchRandomStream(this.#randomSeeds.firstAttack),
+      new MatchRandomStream(this.#randomSeeds.secondAttack)
     ] as const;
-    this.#holeRandom = new MatchRandomStream(seeds.garbageHole);
+    this.#holeRandom = new MatchRandomStream(this.#randomSeeds.garbageHole);
     const rules = createPlayerSimulationRules(this.#tickRateHz);
     this.#simulations = this.#participants.map((playerId, index) =>
       new PlayerSimulation({
@@ -106,6 +117,8 @@ export class MatchCoordinator {
       stateSequence: this.#stateSequence,
       lastEventSequence: this.#eventSequence,
       finished: this.#finished,
+      randomSeeds: this.#randomSeeds,
+      events: Object.freeze([...this.#events]),
       simulations: this.#simulations
     });
   }
@@ -159,18 +172,32 @@ export class MatchCoordinator {
 
   clearHeldInput(playerId: string): void {
     this.#simulationFor(playerId).clearHeldInput();
+    this.#safeControlFrame({
+      serverFrame: this.#serverFrame,
+      controls: [{ kind: "clearHeld", playerId }]
+    });
   }
 
   resetInput(playerId: string): { readonly inputEpoch: number; readonly nextSequence: 0 } {
     this.#simulationFor(playerId).clearHeldInput();
-    return this.#inputQueue.resetPlayer(playerId);
+    const reset = this.#inputQueue.resetPlayer(playerId);
+    this.#safeControlFrame({
+      serverFrame: this.#serverFrame,
+      controls: [{ kind: "resetInput", playerId, inputEpoch: reset.inputEpoch }]
+    });
+    return reset;
   }
 
   advanceOneFrame(): void {
     if (this.#finished) return;
     this.#serverFrame += 1;
+    const drainedInputs = this.#inputQueue.drain(this.#serverFrame);
+    this.#safeAppliedFrame({
+      serverFrame: this.#serverFrame,
+      drainedInputs
+    });
     const actions = new Map<string, SimulationInputAction[]>();
-    for (const input of this.#inputQueue.drain(this.#serverFrame)) {
+    for (const input of drainedInputs) {
       const list = actions.get(input.playerId) ?? [];
       list.push(...input.actions);
       actions.set(input.playerId, list);
@@ -233,7 +260,7 @@ export class MatchCoordinator {
     const targetIndex = sourceIndex === 0 ? 1 : 0;
     for (const amount of packets) {
       this.#eventSequence += 1;
-      this.#simulations[targetIndex].queueGarbage({
+      const packet = Object.freeze({
         packetId: `${this.#matchId}:g:${this.#eventSequence}`,
         sourcePlayerId: this.#participants[sourceIndex],
         amount,
@@ -242,6 +269,20 @@ export class MatchCoordinator {
           this.#simulations[targetIndex].view.rules.garbageTravelFrames,
         hole: this.#holeRandom.nextInteger(10)
       });
+      this.#simulations[targetIndex].queueGarbage(packet);
+      this.#events.push(Object.freeze({
+        eventSequence: this.#eventSequence,
+        kind: "garbage.queued",
+        packet: Object.freeze({
+          packetId: packet.packetId,
+          sourcePlayerId: packet.sourcePlayerId,
+          amount: packet.amount,
+          appliesAtFrame: packet.appliesAtFrame
+        }),
+        targetPlayerId: this.#participants[targetIndex],
+        holeSeed: packet.hole
+      }));
+      if (this.#events.length > MAX_RETAINED_EVENTS) this.#events.shift();
     }
   }
 
@@ -251,6 +292,20 @@ export class MatchCoordinator {
   ): void {
     if (this.#finished) return;
     this.#finished = true;
+    const finalView = this.view;
+    const finalStateHashes = Object.freeze([
+      {
+        playerId: this.#participants[0],
+        hash: selfStateHash(finalView, this.#participants[0])
+      },
+      {
+        playerId: this.#participants[1],
+        hash: selfStateHash(finalView, this.#participants[1])
+      }
+    ]) as readonly [
+      { readonly playerId: string; readonly hash: string },
+      { readonly playerId: string; readonly hash: string }
+    ];
     const reveal = this.#sequence.finish();
     const message: MatchFinishedResult["message"] = {
       type: "match.end",
@@ -272,7 +327,12 @@ export class MatchCoordinator {
         serverFrame: this.#serverFrame,
         winnerPlayerId,
         reason,
-        message
+        message,
+        randomSeedReveal: {
+          pieceSequence: reveal,
+          matchRandom: this.#randomSeeds
+        },
+        finalStateHashes
       }));
     } catch (error) {
       this.#report(error);
@@ -281,6 +341,16 @@ export class MatchCoordinator {
 
   #safeSnapshot(): void {
     try { this.#onSnapshot(this.view); }
+    catch (error) { this.#report(error); }
+  }
+
+  #safeAppliedFrame(frame: import("./matchReplayRecorderTypes.ts").MatchReplayAppliedFrame): void {
+    try { this.#onAppliedFrame(frame); }
+    catch (error) { this.#report(error); }
+  }
+
+  #safeControlFrame(frame: import("./matchReplayRecorderTypes.ts").MatchReplayControlFrame): void {
+    try { this.#onControlFrame(frame); }
     catch (error) { this.#report(error); }
   }
 

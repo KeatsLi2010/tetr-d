@@ -1,11 +1,11 @@
-# 实时对战协议 v3
+# 实时对战协议 v4
 
 类型契约位于 `packages/protocol/src`，运行时严格 schema 位于 `apps/server/src/gateway/schemas`。
 
 ## 传输
 
 - WebSocket 路径：`/ws`
-- 子协议：`tetr-d.v3`
+- 子协议：`tetr-d.v4`
 - 文本 JSON；单条消息上限 8 KiB；关闭压缩扩展。
 - 生产环境使用精确 `Origin` allowlist。
 - 未知字段、非有限数字、超长 ID、内部命令字段和二进制消息均被拒绝。
@@ -15,7 +15,7 @@
 ```json
 {
   "type": "hello",
-  "protocolVersion": 3,
+  "protocolVersion": 4,
   "buildId": "web-dev",
   "resumeToken": "optional"
 }
@@ -26,7 +26,7 @@
 ```json
 {
   "type": "welcome",
-  "protocolVersion": 3,
+  "protocolVersion": 4,
   "connectionId": "c_...",
   "heartbeatMs": 15000
 }
@@ -102,7 +102,7 @@ Resume token 是 256-bit 不透明值。服务端只保存 HMAC-SHA256 digest。
     "T", "I", "O", "L", "S", "Z", "J",
     "J", "Z", "T", "O", "I", "L", "S"
   ],
-  "rulesetVersion": "versus-srs-plus-tetrio-s2-v2",
+  "rulesetVersion": "versus-srs-plus-tetrio-s2-v3",
   "simulationHz": 240,
   "inputEpoch": 0,
   "serverFrame": 0,
@@ -132,7 +132,7 @@ Resume token 是 256-bit 不透明值。服务端只保存 HMAC-SHA256 digest。
   "pieceSequenceReveal": {
     "version": 1,
     "matchId": "m_...",
-    "rulesetVersion": "versus-srs-plus-tetrio-s2-v2",
+    "rulesetVersion": "versus-srs-plus-tetrio-s2-v3",
     "seedHex": "32-char-hex"
   }
 }
@@ -142,7 +142,7 @@ Resume token 是 256-bit 不透明值。服务端只保存 HMAC-SHA256 digest。
 
 ## 输入与状态同步
 
-协议定义 `match.input`、`match.inputAck`、`match.snapshot`、`match.delta`、`match.resyncRequest` 和 `match.end`。当前权威路径实现 input ack、完整 snapshot 和终局；`match.delta` 与单消息 `resume.ok` 保留为后续带宽/恢复优化，重连目前通过新的 `match.start` 与完整 snapshot 恢复。
+协议定义 `match.input`、`match.inputAck`、`match.snapshot`、`match.delta`、`match.resyncRequest` 和 `match.end`。权威路径已实现按接收者选择 full/delta、基线校验、单次重同步请求与持久回放；详见 [状态同步](match-state-sync.md) 和 [持久回放](replays.md)。
 
 当前规则：
 

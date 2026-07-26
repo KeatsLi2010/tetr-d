@@ -125,4 +125,4 @@ Match Coordinator 只接受当前参赛者的 `match.input` 与 `match.forfeit`�
 - 网络与会话：`apps/server/src/gateway/webSocketGateway.ts`、`realtimeService.ts`
 - Effect 与共享开局序列：`apps/server/src/rooms/roomEffectProcessor.ts`、`apps/server/src/matchPieceSequence.ts`
 - 比赛消息/生命周期：`apps/server/src/matches/matchMessageService.ts`、`matchRegistry.ts`、`matchCoordinator.ts`
-- 协议：[实时协议 v3](protocol.md)
+- 协议：[实时协议 v4](protocol.md)

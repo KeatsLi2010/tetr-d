@@ -6,7 +6,7 @@ import type {
 import type { PendingGarbagePacket } from "@tetr-d/protocol";
 
 import type { GameSessionPhase } from "../sessionTypes";
-import { BoardCanvas } from "./BoardCanvas";
+import { BoardCanvas } from "./LayeredBoardCanvas.tsx";
 import { PiecePreview } from "./PiecePreview";
 import type { ServerFrameAnchor } from "../duel/garbagePreviewModel.ts";
 import { GarbagePreviewBar } from "./GarbagePreviewBar.tsx";

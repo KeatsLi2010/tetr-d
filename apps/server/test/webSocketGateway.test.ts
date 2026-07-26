@@ -15,7 +15,7 @@ import {
 
 const ORIGIN = "http://integration.test";
 const HOST = "integration.test";
-const SUBPROTOCOL = "tetr-d.v3";
+const SUBPROTOCOL = "tetr-d.v4";
 const MESSAGE_TIMEOUT_MS = 5_000;
 const MATCH_TIMEOUT_MS = 8_000;
 
@@ -28,7 +28,7 @@ interface Fixture {
 }
 
 async function setup(t: TestContext): Promise<Fixture> {
-  assert.equal(PROTOCOL_VERSION, 3);
+  assert.equal(PROTOCOL_VERSION, 4);
   const errors: unknown[] = [];
   const clients: WebSocketProbe[] = [];
   const app = createTetrServer({

@@ -8,6 +8,7 @@ import {
   type ActivePiece,
   type Board,
   type PieceKind,
+  type RotationDirection,
   type SimulationInputAction
 } from "@tetr-d/game-core";
 import type {
@@ -210,7 +211,32 @@ export function predictPlayerActions(
 ): PredictedPlayerActions {
   let state = initial;
   const spawnCauses: PredictedSpawnCause[] = [];
+  let generationPending = false;
+  let bufferedHold = false;
+  let bufferedRotation: RotationDirection | null = null;
+  const finishGeneration = () => {
+    if (!generationPending) return;
+    if (bufferedHold) state = predictHold(state);
+    if (bufferedRotation !== null) {
+      state = predictAction(state, {
+        kind: "rotate",
+        direction: bufferedRotation
+      });
+    }
+    generationPending = false;
+    bufferedHold = false;
+    bufferedRotation = null;
+  };
   for (const action of actions) {
+    if (
+      generationPending &&
+      (action.kind === "hold" || action.kind === "rotate")
+    ) {
+      if (action.kind === "hold") bufferedHold = true;
+      else bufferedRotation = action.direction;
+      continue;
+    }
+    finishGeneration();
     const previous = state;
     state = predictAction(state, action);
     if (
@@ -226,7 +252,14 @@ export function predictPlayerActions(
     ) {
       spawnCauses.push("hold");
     }
+    if (
+      (action.kind === "hardDrop" && state.piecesPlaced > previous.piecesPlaced)
+      || (action.kind === "hold" && state.canHold === false && state.active !== previous.active)
+    ) {
+      generationPending = true;
+    }
   }
+  finishGeneration();
   return Object.freeze({
     state: Object.freeze(state),
     spawnCauses: Object.freeze(spawnCauses)

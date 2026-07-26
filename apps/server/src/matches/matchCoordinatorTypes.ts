@@ -1,11 +1,13 @@
 import type { PublicPlayer } from "../../../../packages/protocol/src/roomMessages.ts";
 import type {
   InputAcknowledgement,
+  MatchEvent,
   MatchServerMessage
 } from "../../../../packages/protocol/src/matchMessages.ts";
 import type { MatchPieceSequence } from "../matchPieceSequence.ts";
 import type { MatchRandomSeeds } from "./matchRandom.ts";
 import type { Board } from "../../../../packages/game-core/src/board.ts";
+import type { MatchReplayAppliedFrame, MatchReplayControlFrame } from "./matchReplayRecorderTypes.ts";
 
 export interface MatchCoordinatorOptions {
   readonly matchId: string;
@@ -19,6 +21,8 @@ export interface MatchCoordinatorOptions {
   /** Replay/test injection; production starts both players empty. */
   readonly initialBoards?: readonly [Board, Board];
   readonly onSnapshot?: (coordinator: MatchCoordinatorView) => void;
+  readonly onAppliedFrame?: (frame: MatchReplayAppliedFrame) => void;
+  readonly onControlFrame?: (frame: MatchReplayControlFrame) => void;
   readonly onFinished?: (result: MatchFinishedResult) => void;
   readonly onError?: (error: unknown) => void;
 }
@@ -35,6 +39,14 @@ export interface MatchFinishedResult {
     | "simultaneous_topout"
     | "draw";
   readonly message: Extract<MatchServerMessage, { readonly type: "match.end" }>;
+  readonly randomSeedReveal: {
+    readonly pieceSequence: import("../matchPieceSequence.ts").MatchPieceSequenceReveal;
+    readonly matchRandom: MatchRandomSeeds;
+  };
+  readonly finalStateHashes: readonly [
+    { readonly playerId: string; readonly hash: string },
+    { readonly playerId: string; readonly hash: string }
+  ];
 }
 
 export interface MatchCoordinatorView {
@@ -47,6 +59,8 @@ export interface MatchCoordinatorView {
   readonly stateSequence: number;
   readonly lastEventSequence: number;
   readonly finished: boolean;
+  readonly randomSeeds: MatchRandomSeeds;
+  readonly events: readonly MatchEvent[];
   readonly simulations: readonly [
     import("../../../../packages/game-core/src/playerSimulation.ts").PlayerSimulation,
     import("../../../../packages/game-core/src/playerSimulation.ts").PlayerSimulation

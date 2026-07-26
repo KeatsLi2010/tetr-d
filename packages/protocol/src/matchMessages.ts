@@ -113,12 +113,18 @@ export interface InputAcknowledgement {
 
 export interface PlayerPatch {
   readonly playerId: string;
-  readonly changedRows?: readonly { readonly y: number; readonly bits: number }[];
+  readonly changedRows?: readonly {
+    readonly y: number;
+    readonly bits: number;
+    readonly garbage: boolean;
+  }[];
   readonly active?: PlayerSnapshot["active"];
   readonly hold?: PieceKind | null;
   readonly next?: readonly PieceKind[];
   readonly combo?: number;
   readonly backToBack?: number;
+  readonly piecesPlaced?: number;
+  readonly totalAttackSent?: number;
   readonly pendingGarbage?: readonly PendingGarbagePacket[];
   readonly toppedOut?: boolean;
 }
@@ -194,12 +200,14 @@ export type MatchServerMessage =
       readonly matchId: string;
       readonly stateSequence: number;
       readonly baseStateSequence: number;
+      readonly basePublicStateHash: string;
       readonly lastEventSequence: number;
       readonly serverFrame: number;
       readonly publicStateHash: string;
       readonly selfStateHash: string | null;
       readonly patches: readonly PlayerPatch[];
       readonly events: readonly MatchEvent[];
+      readonly self: PrivateSimulationSnapshot | null;
       readonly acknowledgement?: InputAcknowledgement;
     }
   | {

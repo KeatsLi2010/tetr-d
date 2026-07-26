@@ -9,7 +9,7 @@ import type { TetrServerApp, TetrServerOptions } from "../src/serverApp.ts";
 
 const ORIGIN = "http://gateway.test";
 const HOST = "gateway.test";
-const SUBPROTOCOL = "tetr-d.v3";
+const SUBPROTOCOL = "tetr-d.v4";
 
 function secureOptions(
   overrides: Pick<

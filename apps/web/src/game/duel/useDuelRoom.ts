@@ -6,6 +6,10 @@ import {
 } from "react";
 
 import type { PlayerConfig } from "../../config/v3/index.ts";
+import {
+  BROWSER_FRAME_SCHEDULER,
+  LatestFramePublisher
+} from "../hooks/LatestFramePublisher.ts";
 import { DuelRoomSession } from "./DuelRoomSession.ts";
 import type {
   DuelRoomActions,
@@ -33,11 +37,22 @@ export function useDuelRoom(
 
   useEffect(() => {
     const session = new DuelRoomSession(initialConfig);
+    const publisher = new LatestFramePublisher(
+      setView,
+      BROWSER_FRAME_SCHEDULER
+    );
     sessionRef.current = session;
-    const unsubscribe = session.subscribe(setView);
+    const unsubscribe = session.subscribe((next, source) => {
+      if (source === "realtime-snapshot") {
+        publisher.enqueue(next);
+      } else {
+        publisher.publishNow(next);
+      }
+    });
     void session.resumeSaved();
     return () => {
       unsubscribe();
+      publisher.dispose();
       session.dispose();
       if (sessionRef.current === session) sessionRef.current = null;
     };

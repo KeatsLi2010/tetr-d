@@ -1,26 +1,18 @@
 import type { RoomState } from "../../../../packages/room-core/src/model.ts";
-import type {
-  MatchClientMessage,
-  MatchServerMessage
-} from "../../../../packages/protocol/src/matchMessages.ts";
+import type { MatchClientMessage, MatchServerMessage } from "../../../../packages/protocol/src/matchMessages.ts";
 import type { PublicPlayer } from "../../../../packages/protocol/src/roomMessages.ts";
 import { RULESET_VERSION } from "../../../../packages/protocol/src/versions.ts";
 import type { SessionStore } from "../auth/sessionStore.ts";
 import type { ConnectionHub } from "../gateway/connectionHub.ts";
 import { MatchPieceSequence } from "../matchPieceSequence.ts";
 import { FixedStepLoop } from "./fixedStepLoop.ts";
-import type {
-  FixedStepClock,
-  FixedStepScheduler,
-  FixedStepOverloadEvent,
-  FixedStepLoopState
-} from "./fixedStepLoop.ts";
+import type { FixedStepClock, FixedStepScheduler, FixedStepOverloadEvent, FixedStepLoopState } from "./fixedStepLoop.ts";
 import { MatchCoordinator } from "./matchCoordinator.ts";
-import type {
-  MatchFinishedResult,
-  MatchInputReceipt
-} from "./matchCoordinatorTypes.ts";
+import type { MatchFinishedResult, MatchInputReceipt } from "./matchCoordinatorTypes.ts";
+import { projectMatchUpdate } from "./matchDeltaProjection.ts";
+import { MatchDeliveryBaselines } from "./matchDeliveryBaselines.ts";
 import { projectMatchSnapshot } from "./matchProjection.ts";
+import { MatchReplayPersistence } from "./matchReplayPersistence.ts";
 
 export interface StartRegisteredMatch {
   readonly matchId: string;
@@ -35,24 +27,20 @@ export interface MatchRegistryOptions {
   readonly tickRateHz: number;
   readonly snapshotRateHz?: number;
   readonly getRoomState: (roomId: string) => RoomState | null;
-  readonly onMatchFinished: (
-    result: MatchFinishedResult
-  ) => void | Promise<void>;
+  readonly onMatchFinished: (result: MatchFinishedResult) => void | Promise<void>;
   readonly sequenceFactory?: (input: StartRegisteredMatch) => MatchPieceSequence;
   readonly clock?: FixedStepClock;
   readonly scheduler?: FixedStepScheduler;
   readonly onOverload?: (event: FixedStepOverloadEvent) => void;
   readonly onError?: (error: unknown) => void;
+  readonly replayRootDirectory?: string;
+  readonly serverVersion?: string;
+  readonly now?: () => number;
 }
 
-function sameMatch(
-  coordinator: MatchCoordinator,
-  input: StartRegisteredMatch
-): boolean {
+function sameMatch(coordinator: MatchCoordinator, input: StartRegisteredMatch): boolean {
   const view = coordinator.view;
-  return view.roomId === input.roomId &&
-    view.participants[0] === input.participants[0] &&
-    view.participants[1] === input.participants[1];
+  return view.roomId === input.roomId && view.participants[0] === input.participants[0] && view.participants[1] === input.participants[1];
 }
 
 export class MatchRegistry {
@@ -66,7 +54,9 @@ export class MatchRegistry {
   readonly #onError: (error: unknown) => void;
   readonly #matches = new Map<string, MatchCoordinator>();
   readonly #inputGenerations = new Map<string, Map<string, number>>();
+  readonly #delivery = new MatchDeliveryBaselines();
   readonly #loop: FixedStepLoop;
+  readonly #replays: MatchReplayPersistence;
   #disposed = false;
 
   constructor(options: MatchRegistryOptions) {
@@ -77,6 +67,11 @@ export class MatchRegistry {
     this.#getRoomState = options.getRoomState;
     this.#onMatchFinished = options.onMatchFinished;
     this.#onError = options.onError ?? (() => undefined);
+    this.#replays = new MatchReplayPersistence({
+      serverVersion: options.serverVersion ?? "dev", tickRateHz: this.#tickRateHz,
+      ...(options.replayRootDirectory === undefined ? {} : { rootDirectory: options.replayRootDirectory }),
+      ...(options.now === undefined ? {} : { now: options.now }), onError: (error) => this.#report(error)
+    });
     this.#sequenceFactory = options.sequenceFactory ?? ((input) =>
       new MatchPieceSequence({
         matchId: input.matchId,
@@ -119,16 +114,26 @@ export class MatchRegistry {
       }
       return existing;
     }
+    const sequence = this.#sequenceFactory(input);
     const coordinator = new MatchCoordinator({
       ...input,
-      sequence: this.#sequenceFactory(input),
+      sequence,
       tickRateHz: this.#tickRateHz,
       snapshotRateHz: this.#snapshotRateHz,
       onSnapshot: (view) => this.#broadcastSnapshot(view.matchId),
       onFinished: (result) => this.#handleFinished(result),
+      onAppliedFrame: (frame) => this.#replays.recordAppliedFrame(input.matchId, frame),
+      onControlFrame: (frame) => this.#replays.recordControlFrame(input.matchId, frame),
       onError: (error) => this.#report(error)
     });
     this.#matches.set(input.matchId, coordinator);
+    this.#replays.start({
+      matchId: input.matchId,
+      players: input.players,
+      sequence,
+      randomSeeds: coordinator.view.randomSeeds,
+      garbageTravelFrames: coordinator.view.simulations[0].view.rules.garbageTravelFrames
+    });
     this.#rememberInputGenerations(input);
     if (this.#loop.state === "idle") this.#loop.start();
     else if (this.#loop.state === "paused") this.#loop.resume();
@@ -136,6 +141,7 @@ export class MatchRegistry {
       this.#matches.delete(input.matchId);
       this.#inputGenerations.delete(input.matchId);
       coordinator.close();
+      void this.#replays.closePartial(input.matchId);
       throw new Error("Match simulation loop is unavailable.");
     }
     return coordinator;
@@ -145,8 +151,10 @@ export class MatchRegistry {
     for (const [matchId, coordinator] of this.#matches) {
       if (coordinator.view.roomId !== roomId || matchId === activeMatchId) continue;
       coordinator.close();
+      void this.#replays.closePartial(matchId);
       this.#matches.delete(matchId);
       this.#inputGenerations.delete(matchId);
+      this.#delivery.clearMatch(matchId);
     }
     if (this.#matches.size === 0 && this.#loop.state === "running") {
       this.#loop.pause();
@@ -222,20 +230,27 @@ export class MatchRegistry {
     matchId: string,
     receipt: MatchInputReceipt
   ): boolean {
-    return this.#sendPlayer(playerId, {
+    const sent = this.#sendPlayer(playerId, {
       type: "match.inputAck",
       matchId,
       ...receipt
     });
+    if (!sent) this.#delivery.reject(matchId, playerId);
+    return sent;
   }
 
   sendSnapshot(playerId: string, matchId: string): boolean {
     const match = this.#matches.get(matchId);
     if (match === undefined) return false;
-    return this.#sendPlayer(
-      playerId,
-      projectMatchSnapshot(match.view, playerId)
-    );
+    const snapshot = projectMatchSnapshot(match.view, playerId);
+    const generation = this.#connectionGeneration(playerId);
+    const sent = this.#sendPlayer(playerId, snapshot);
+    if (sent && generation !== null) {
+      this.#delivery.accept(matchId, playerId, generation, snapshot);
+    } else {
+      this.#delivery.reject(matchId, playerId);
+    }
+    return sent;
   }
 
   dispose(): void {
@@ -243,8 +258,10 @@ export class MatchRegistry {
     this.#disposed = true;
     this.#loop.close();
     for (const match of this.#matches.values()) match.close();
+    void this.#replays.closeAllPartials();
     this.#matches.clear();
     this.#inputGenerations.clear();
+    this.#delivery.clear();
   }
 
   #stepMatches(): void {
@@ -263,7 +280,21 @@ export class MatchRegistry {
     const state = this.#getRoomState(match.view.roomId);
     if (state === null) return;
     for (const playerId of Object.keys(state.members)) {
-      this.#sendPlayer(playerId, projectMatchSnapshot(match.view, playerId));
+      const generation = this.#connectionGeneration(playerId);
+      if (generation === null) {
+        this.#delivery.reject(matchId, playerId);
+        continue;
+      }
+      const baseline = this.#delivery.get(
+        matchId, playerId, generation
+      );
+      const update = projectMatchUpdate(match.view, playerId, baseline);
+      const sent = this.#sendPlayer(playerId, update.message);
+      if (sent) {
+        this.#delivery.accept(
+          matchId, playerId, generation, update.nextBaseline
+        );
+      } else this.#delivery.reject(matchId, playerId);
     }
   }
 
@@ -271,7 +302,13 @@ export class MatchRegistry {
     const state = this.#getRoomState(result.roomId);
     if (state !== null) this.#broadcastRoom(state, result.message);
     try {
-      void Promise.resolve(this.#onMatchFinished(result))
+      void this.#replays.finalize(result.matchId, {
+        serverFrame: result.serverFrame,
+        winnerPlayerId: result.winnerPlayerId,
+        reason: result.reason,
+        randomSeedReveal: result.randomSeedReveal,
+        finalStateHashes: result.finalStateHashes
+      }).then(() => this.#onMatchFinished(result))
         .catch((error) => this.#report(error))
         .finally(() => this.#retireFinished(result.matchId));
     } catch (error) {
@@ -285,6 +322,7 @@ export class MatchRegistry {
     if (match === undefined || !match.view.finished) return;
     this.#matches.delete(matchId);
     this.#inputGenerations.delete(matchId);
+    this.#delivery.clearMatch(matchId);
     if (this.#matches.size === 0 && this.#loop.state === "running") {
       this.#loop.pause();
     }
@@ -333,6 +371,12 @@ export class MatchRegistry {
     for (const playerId of Object.keys(state.members)) {
       this.#sendPlayer(playerId, message);
     }
+  }
+
+  #connectionGeneration(playerId: string): number | null {
+    const session = this.#sessions.getByPlayerId(playerId);
+    return session === null || session.activeConnectionId === null
+      ? null : session.connectionGeneration;
   }
 
   #sendPlayer(playerId: string, message: MatchServerMessage): boolean {
