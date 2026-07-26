@@ -4,6 +4,7 @@ import {
   type Board,
   type PlayerPieceSpawnCause,
   type PlayerSimulationRuleOverrides,
+  type PlayerLockSummary,
   type SevenBagSeed,
   type SimulationInputAction
 } from "@tetr-d/game-core";
@@ -46,6 +47,8 @@ export interface SoloGameSessionOptions {
     frame: number,
     cause: PlayerPieceSpawnCause
   ) => void;
+  /** Reports authoritative local lock summaries for optional local feedback. */
+  readonly onLock?: (atMs: number, frame: number, lock: PlayerLockSummary) => void;
   /**
    * Called once per 240 Hz tick, even when advanceTo is driven by a slower
    * requestAnimationFrame cadence. This is where HandlingEngine.advance goes.
@@ -200,7 +203,10 @@ export class SoloGameSession implements GameSession {
     }
     this.#frame += 1;
     const result = this.#simulation.advanceFrame(this.#frame, actions);
-    for (const lock of result.locks) this.#lines += lock.lines;
+    for (const lock of result.locks) {
+      this.#lines += lock.lines;
+      this.#options.onLock?.(tickTimeMs, this.#frame, lock);
+    }
     for (const spawn of result.spawns) {
       this.#options.onPieceSpawned?.(
         tickTimeMs,

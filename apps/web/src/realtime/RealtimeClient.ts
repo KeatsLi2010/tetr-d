@@ -80,7 +80,7 @@ export class RealtimeClient {
     options: RealtimeConnectionOptions
   ): Promise<{ readonly client: RealtimeClient; readonly auth: AuthOkMessage }> {
     return new Promise((resolve, reject) => {
-      const socket = new WebSocket(websocketUrl(), "tetr-d.v3");
+      const socket = new WebSocket(websocketUrl(), "tetr-d.v4");
       const client = new RealtimeClient(socket, options);
       let welcomed = false;
       let settled = false;
@@ -138,7 +138,7 @@ export class RealtimeClient {
       socket.addEventListener("open", () => {
         const hello: ClientMessage = {
           type: "hello",
-          protocolVersion: 3,
+          protocolVersion: 4,
           buildId: "tetr-d-web-duel",
           ...(options.resumeToken === undefined
             ? {}

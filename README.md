@@ -20,7 +20,7 @@ TETR-D 是一个现代俄罗斯方块 1v1 对战网站框架。当前已完成 S
 
 - `packages/game-core`：确定性 SRS+、棋盘/锁定/消行、Spin、TETR.IO Season 2 参考攻击规则、垃圾与共享 7-Bag。
 - `packages/room-core`：固定双人席位、可选观战、房主、准备、3 秒倒计时、番战、重连、过期与不变量。
-- `packages/protocol`：拆分后的 WebSocket 协议 v3 类型契约。
+- `packages/protocol`：WebSocket 协议 v4 类型契约，包含 `match.delta` 与重同步。
 - `apps/server`：严格 schema、会话/连接隔离、room actor/runtime、effect outbox，以及可配置固定步进 Match Coordinator；权威模拟默认 240 Hz，允许通过 `MATCH_TICK_RATE_HZ` 设置为 `60..1000`。
 - 比赛链路：共享同包 7-Bag、`match.input` 调度与 ack、30 Hz snapshot、攻击/垃圾/KO、断线或投降裁决和完整 `match.end`。
 - `apps/web`：React + Vite 首页与设置界面、本地键位/Handling 配置、Handling Lab、`/play/solo` 单人练习，以及 `/play/duel` 双人房间和对战棋盘。
@@ -33,8 +33,8 @@ TETR-D 是一个现代俄罗斯方块 1v1 对战网站框架。当前已完成 S
 
 - 音效、观战 UI、完整确定性局面预测与更细粒度的 snapshot/delta 校正；
 - 锁定方块逐格颜色；当前使用中性色显示锁定块；
-- IRS/IHS 等生成缓冲与完整方块生成控制器的最终接线；
-- `match.delta` 带宽优化、持久回放与异常恢复演练；
+- IRS/IHS 生成缓冲、SRS+ 旋转与完整方块生成控制器已接线；
+- `match.delta` 带宽优化、持久回放与异常恢复校验已完成；
 - 持久账号、战绩、匹配、排位和多节点扩展。
 
 ## 本地运行
@@ -57,7 +57,7 @@ npm run dev:server
 - 双人对战：`http://127.0.0.1:4180/play/duel`
 - 健康检查：`http://127.0.0.1:4180/api/health`
 - WebSocket：`ws://127.0.0.1:4180/ws`
-- 子协议：`tetr-d.v3`
+- 子协议：`tetr-d.v4`
 
 环境变量：
 
@@ -74,7 +74,10 @@ npm run dev:server
 
 - [系统架构](docs/architecture.md)
 - [双人房间模式](docs/room-mode.md)
-- [实时协议 v3](docs/protocol.md)
+- [实时协议 v4](docs/protocol.md)
+- [状态同步](docs/match-state-sync.md)
+- [持久回放](docs/replays.md)
+- [DG-LAB 本地反馈](docs/dglab-feedback.md)
 - [SRS+ 规则](docs/rules/srs-plus.md)
 - [玩家本地配置](docs/ui/player-config.md)
 - [单人练习模式](docs/ui/solo-mode.md)

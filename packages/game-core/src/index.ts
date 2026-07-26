@@ -2,6 +2,7 @@ export * from "./attackTypes.ts";
 export * from "./board.ts";
 export * from "./garbageQueue.ts";
 export * from "./pieces.ts";
+export * from "./pieceGenerationController.ts";
 export * from "./pieceSpawn.ts";
 export * from "./playerSimulation.ts";
 export * from "./playerSimulationTypes.ts";

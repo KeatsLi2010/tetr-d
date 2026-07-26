@@ -9,7 +9,10 @@ import type { PlayerConfig } from "../../config/v3/index.ts";
 import { DuelMatchInput } from "./DuelMatchInput.ts";
 import { DuelRoomCommands } from "./DuelRoomCommands.ts";
 import { INITIAL_DUEL_ROOM_VIEW } from "./initialDuelRoomView.ts";
+import { MatchDeltaReceiver } from "./MatchDeltaReceiver.ts";
 import { DuelTransport } from "./DuelTransport.ts";
+import { DuelPenaltyDetector } from "./duelPenaltyDetector.ts";
+import type { DgLabPenaltyEvent } from "../../dglab/dglabTypes.ts";
 import type {
   DuelRoomView,
   EnterRoomInput
@@ -20,7 +23,14 @@ import {
   predictPlayerActions
 } from "./networkPlayerState.ts";
 
-type Listener = (view: DuelRoomView) => void;
+export type DuelRoomUpdateSource =
+  | "control"
+  | "local-prediction"
+  | "realtime-snapshot";
+type Listener = (
+  view: DuelRoomView,
+  source: DuelRoomUpdateSource
+) => void;
 type MatchSnapshot = Extract<
   MatchServerMessage,
   { readonly type: "match.snapshot" }
@@ -35,12 +45,14 @@ export class DuelRoomSession {
   #view: DuelRoomView = INITIAL_DUEL_ROOM_VIEW;
   #input: DuelMatchInput | null = null;
   #requestOrdinal = 0;
-  #lastStateSequence = -1;
-  #lastEventSequence = 0;
+  readonly #matchState = new MatchDeltaReceiver();
+  readonly #penaltyDetector = new DuelPenaltyDetector();
+  readonly #onPenaltyEvent: ((event: DgLabPenaltyEvent) => void) | undefined;
   #lastSelfCursor: number | null = null;
 
-  constructor(config: PlayerConfig) {
+  constructor(config: PlayerConfig, onPenaltyEvent?: (event: DgLabPenaltyEvent) => void) {
     this.#config = config;
+    this.#onPenaltyEvent = onPenaltyEvent;
     this.#commands = new DuelRoomCommands({
       getView: () => this.#view,
       send: (message) => this.#send(message)
@@ -68,7 +80,7 @@ export class DuelRoomSession {
 
   subscribe(listener: Listener): () => void {
     this.#listeners.add(listener);
-    listener(this.#view);
+    listener(this.#view, "control");
     return () => this.#listeners.delete(listener);
   }
 
@@ -144,7 +156,7 @@ export class DuelRoomSession {
     this.#input = null;
     this.#transport.close(true);
     this.#view = INITIAL_DUEL_ROOM_VIEW;
-    this.#emit();
+    this.#emit("control");
   }
 
   dispose(): void {
@@ -193,7 +205,17 @@ export class DuelRoomSession {
       return;
     }
     if (message.type === "match.snapshot") {
-      this.#acceptSnapshot(message);
+      const snapshot = this.#matchState.acceptSnapshot(message);
+      if (snapshot !== null) this.#acceptSnapshot(snapshot, []);
+      return;
+    }
+    if (message.type === "match.delta") {
+      const update = this.#matchState.acceptDelta(message);
+      if (update.snapshot !== null) {
+        this.#acceptSnapshot(update.snapshot, message.events);
+      } else if (update.resyncRequest !== null) {
+        this.#send(update.resyncRequest);
+      }
       return;
     }
     if (message.type === "match.inputAck") {
@@ -214,7 +236,7 @@ export class DuelRoomSession {
       this.#commands.reset();
       this.#transport.close(true);
       this.#view = INITIAL_DUEL_ROOM_VIEW;
-      this.#emit();
+      this.#emit("control");
       return;
     }
     if (message.type === "error") {
@@ -231,8 +253,8 @@ export class DuelRoomSession {
     this.#input = null;
     this.#commands.reset();
     this.#scheduledInputs.clear();
-    this.#lastStateSequence = -1;
-    this.#lastEventSequence = 0;
+    this.#matchState.start(message.matchId);
+    this.#penaltyDetector.reset();
     this.#lastSelfCursor = null;
     this.#setView({
       match: message,
@@ -257,14 +279,8 @@ export class DuelRoomSession {
     });
   }
 
-  #acceptSnapshot(message: MatchSnapshot): void {
-    if (
-      message.matchId !== this.#view.match?.matchId ||
-      message.stateSequence <= this.#lastStateSequence
-    ) return;
-    this.#lastStateSequence = message.stateSequence;
+  #acceptSnapshot(message: MatchSnapshot, events: readonly import("@tetr-d/protocol").MatchEvent[]): void {
     this.#input?.synchronizeServerFrame(message.serverFrame);
-    this.#lastEventSequence = message.lastEventSequence;
     if (message.acknowledgement !== undefined) {
       this.#acceptAcknowledgement({
         matchId: message.matchId,
@@ -286,6 +302,7 @@ export class DuelRoomSession {
         player.playerId === ownId ? message.self : null
       )
     );
+    this.#penaltyDetector.observe(players, ownId ?? null, events, (event) => this.#onPenaltyEvent?.(event));
     const ownIndex = players.findIndex((player) => player.playerId === ownId);
     if (ownIndex >= 0 && this.#input !== null) {
       let predicted = players[ownIndex]!;
@@ -308,7 +325,7 @@ export class DuelRoomSession {
         serverFrame: message.serverFrame,
         receivedAtMs: performance.now()
       }
-    });
+    }, "realtime-snapshot");
   }
 
   #acceptAcknowledgement(message: {
@@ -337,7 +354,10 @@ export class DuelRoomSession {
     const players = [...this.#view.players];
     const predicted = predictPlayerActions(players[index]!, actions);
     players[index] = predicted.state;
-    this.#setView({ players: Object.freeze(players) });
+    this.#setView(
+      { players: Object.freeze(players) },
+      "local-prediction"
+    );
     return predicted.spawnCauses;
   }
 
@@ -358,12 +378,15 @@ export class DuelRoomSession {
     }
   }
 
-  #setView(patch: Partial<DuelRoomView>): void {
+  #setView(
+    patch: Partial<DuelRoomView>,
+    source: DuelRoomUpdateSource = "control"
+  ): void {
     this.#view = Object.freeze({ ...this.#view, ...patch });
-    this.#emit();
+    this.#emit(source);
   }
 
-  #emit(): void {
-    for (const listener of this.#listeners) listener(this.#view);
+  #emit(source: DuelRoomUpdateSource): void {
+    for (const listener of this.#listeners) listener(this.#view, source);
   }
 }

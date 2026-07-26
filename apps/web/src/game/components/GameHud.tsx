@@ -7,6 +7,7 @@ interface GameHudProps {
   readonly apm: number;
   readonly combo: number;
   readonly backToBack: number;
+  readonly accessory?: React.ReactNode;
 }
 
 function clockLabel(elapsedMs: number): string {
@@ -26,7 +27,8 @@ export function GameHud({
   pps,
   apm,
   combo,
-  backToBack
+  backToBack,
+  accessory
 }: GameHudProps): React.JSX.Element {
   return (
     <aside className="game-hud" aria-label="本局统计">
@@ -48,6 +50,7 @@ export function GameHud({
       <p>
         当前为完全本地的无限练习；规则层与未来房间比赛共用。
       </p>
+      {accessory}
     </aside>
   );
 }

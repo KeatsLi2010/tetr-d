@@ -11,13 +11,19 @@ import {
   type SettingsSection
 } from "../layout/SettingsNav";
 import { HandlingPanel } from "../settings/HandlingPanel";
+import { DgLabSettingsPanel } from "../settings/DgLabSettingsPanel.tsx";
 import { HandlingTester } from "../settings/HandlingTester";
 import { KeyBindingsPanel } from "../settings/KeyBindingsPanel";
 import { Icon } from "../ui/Icon";
+import { useDgLabConfig } from "../dglab/useDgLabConfig.ts";
+import { DgLabControlPanel } from "../dglab/DgLabControlPanel.tsx";
+import { useDgLabPenalty } from "../dglab/useDgLabPenalty.ts";
 
 function sectionForScroll(): SettingsSection {
   const handling = document.getElementById("handling");
   if (handling === null) return "controls";
+  const dglab = document.getElementById("dglab");
+  if (dglab !== null && dglab.getBoundingClientRect().top < 180) return "dglab";
   return handling.getBoundingClientRect().top < 180
     ? "handling"
     : "controls";
@@ -25,6 +31,8 @@ function sectionForScroll(): SettingsSection {
 
 export function SettingsPage(): React.JSX.Element {
   const state = usePlayerConfig();
+  const dglab = useDgLabConfig();
+  const dglabPenalty = useDgLabPenalty(dglab.config);
   const fileInput = useRef<HTMLInputElement>(null);
   const [section, setSection] = useState<SettingsSection>("controls");
   const [notice, setNotice] = useState<string | null>(null);
@@ -135,6 +143,13 @@ export function SettingsPage(): React.JSX.Element {
                   state.update((config) => ({ ...config, handling }))
                 }
               />
+              <DgLabSettingsPanel
+                config={dglab.config}
+                onChange={(config) => dglab.update(() => config)}
+                onReset={dglab.reset}
+                saveState={dglab.saveState}
+              />
+              <DgLabControlPanel penalty={dglabPenalty} />
             </div>
             <HandlingTester config={state.config} />
           </div>

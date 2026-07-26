@@ -6,11 +6,15 @@ import { DuelEntry } from "../game/components/DuelEntry.tsx";
 import { DuelLobby } from "../game/components/DuelLobby.tsx";
 import { useDuelRoom } from "../game/duel/useDuelRoom.ts";
 import { Brand } from "../ui/Brand.tsx";
+import { useDgLabConfig } from "../dglab/useDgLabConfig.ts";
+import { useDgLabPenalty } from "../dglab/useDgLabPenalty.ts";
 
 export function DuelPage(): React.JSX.Element {
   const { config } = usePlayerConfig();
+  const dglabConfig = useDgLabConfig();
+  const dglab = useDgLabPenalty(dglabConfig.config);
   const sessionConfig = useRef(config).current;
-  const duel = useDuelRoom(sessionConfig);
+  const duel = useDuelRoom(sessionConfig, dglab.handleEvent);
   const roomCode = new URLSearchParams(window.location.search)
     .get("room")?.toUpperCase() ?? "";
 
@@ -43,6 +47,7 @@ export function DuelPage(): React.JSX.Element {
         onForfeit={duel.forfeit}
         onNextRound={duel.nextRound}
         players={duel.players}
+        dglab={dglab}
         result={duel.result}
         room={duel.room}
         selfPlayerId={duel.player.playerId}

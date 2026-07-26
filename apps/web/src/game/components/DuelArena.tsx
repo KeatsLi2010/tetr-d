@@ -7,6 +7,8 @@ import type {
 import type { ServerFrameAnchor } from "../duel/garbagePreviewModel.ts";
 import type { NetworkPlayerState } from "../duel/networkPlayerState.ts";
 import { PlayerWell } from "./PlayerWell.tsx";
+import { DgLabControlPanel } from "../../dglab/DgLabControlPanel.tsx";
+import type { DgLabPenaltyState } from "../../dglab/useDgLabPenalty.ts";
 
 export interface DuelArenaProps {
   readonly selfPlayerId: string;
@@ -19,6 +21,7 @@ export interface DuelArenaProps {
   readonly error: string | null;
   readonly onForfeit: () => void;
   readonly onNextRound: () => void;
+  readonly dglab?: DgLabPenaltyState;
 }
 
 export function DuelArena({
@@ -31,7 +34,8 @@ export function DuelArena({
   disconnected,
   error,
   onForfeit,
-  onNextRound
+  onNextRound,
+  dglab
 }: DuelArenaProps): React.JSX.Element {
   const wins = room.series?.wins ?? [0, 0];
   const canContinue =
@@ -61,6 +65,8 @@ export function DuelArena({
           </button>
         </div>
       </header>
+
+      {dglab !== undefined && <DgLabControlPanel penalty={dglab} />}
 
       <section className="duel-arena__boards">
         {match.players.map((identity, seat) => {

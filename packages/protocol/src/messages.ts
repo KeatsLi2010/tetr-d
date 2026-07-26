@@ -10,6 +10,7 @@ import type {
 } from "./roomMessages.ts";
 
 export * from "./matchMessages.ts";
+export * from "./matchStateDelta.ts";
 export * from "./roomMessages.ts";
 export * from "./versions.ts";
 

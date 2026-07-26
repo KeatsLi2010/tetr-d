@@ -61,7 +61,7 @@ export class RoomEffectProcessor {
     const pieceWindowSize = options.pieceWindowSize ?? MAX_PIECE_WINDOW;
     const matchTickRateHz = options.matchTickRateHz ?? 240;
     if (
-      PROTOCOL_VERSION !== 3 ||
+      PROTOCOL_VERSION !== 4 ||
       !Number.isSafeInteger(pieceWindowSize) ||
       pieceWindowSize < 1 ||
       pieceWindowSize > MAX_PIECE_WINDOW ||

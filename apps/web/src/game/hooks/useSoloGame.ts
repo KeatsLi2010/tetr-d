@@ -8,6 +8,8 @@ import {
   type GameInputCommand
 } from "../input/GameHandlingController.ts";
 import { SoloGameSession } from "../solo/index.ts";
+import { soloLockPenaltyEvents } from "../../dglab/dglabEvents.ts";
+import type { DgLabPenaltyEvent } from "../../dglab/dglabTypes.ts";
 
 interface SoloGameBundle {
   readonly controller: GameHandlingController;
@@ -37,13 +39,18 @@ function configuredCodes(config: PlayerConfig): ReadonlySet<string> {
   return new Set(Object.values(config.bindings).flat());
 }
 
-export function useSoloGame(config: PlayerConfig): SoloGameState {
+export function useSoloGame(
+  config: PlayerConfig,
+  onPenaltyEvent?: (event: DgLabPenaltyEvent) => void
+): SoloGameState {
   const bundleRef = useRef<SoloGameBundle | null>(null);
   const [snapshot, setSnapshot] = useState<GameSessionSnapshot | null>(null);
 
   useEffect(() => {
     const startTimeMs = monotonicNow();
     const controller = new GameHandlingController(config, { startTimeMs });
+    let previousBackToBack = 0;
+    let previousCombo = -1;
     const session = new SoloGameSession({
       seed: makeSeed(),
       now: monotonicNow,
@@ -51,6 +58,11 @@ export function useSoloGame(config: PlayerConfig): SoloGameState {
         controller.actionsForTick(tickTimeMs),
       onPieceSpawned: (atMs, _frame, cause) => {
         controller.notifyPieceSpawned(atMs, cause);
+      },
+      onLock: (_atMs, _frame, lock) => {
+        for (const event of soloLockPenaltyEvents(previousBackToBack, previousCombo, lock)) onPenaltyEvent?.(event);
+        previousBackToBack = lock.backToBack;
+        previousCombo = lock.combo;
       },
       onClockReanchored: (atMs) => controller.clear(atMs)
     });
@@ -73,6 +85,8 @@ export function useSoloGame(config: PlayerConfig): SoloGameState {
 
     const restart = (atMs: number): void => {
       controller.clear(atMs);
+      previousBackToBack = 0;
+      previousCombo = -1;
       session.restart();
     };
 
