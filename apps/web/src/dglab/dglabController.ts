@@ -234,7 +234,7 @@ export class DgLabController {
       channel,
       time,
       durationMs,
-      message: `${channel}:${JSON.stringify(waveformPayload(this.#config.waveform))}`
+      message: `${channel}:${JSON.stringify(waveformPayload(this.#config.waveform, this.#config.customWaveform))}`
     });
   }
 

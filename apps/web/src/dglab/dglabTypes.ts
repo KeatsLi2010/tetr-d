@@ -1,6 +1,13 @@
 export type DgLabChannel = "A" | "B";
 
-export type DgLabWaveformId = "breath" | "tide";
+export type DgLabWaveformId = "breath" | "tide" | "custom";
+
+export interface DgLabWaveformFrame {
+  readonly frequency: number;
+  readonly intensity: number;
+  readonly frequencySteps?: readonly [number, number, number, number];
+  readonly intensitySteps?: readonly [number, number, number, number];
+}
 
 export type DgLabPenaltyEventKind =
   | "b2bBreak"
@@ -27,6 +34,7 @@ export interface DgLabConfig {
   readonly version: 1;
   readonly enabled: boolean;
   readonly waveform: DgLabWaveformId;
+  readonly customWaveform: readonly DgLabWaveformFrame[];
   readonly channel: DgLabChannel;
   readonly maxStrength: number;
   readonly baseStrength: number;

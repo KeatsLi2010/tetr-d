@@ -1,4 +1,5 @@
 import type { DgLabConfig } from "./dglabTypes.ts";
+import { normalizeCustomWaveform } from "./dglabWaveforms.ts";
 
 export const DGLAB_CONFIG_VERSION = 1 as const;
 export const DGLAB_CONFIG_STORAGE_KEY = "tetr-d.dglab-config.v1";
@@ -8,6 +9,7 @@ export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   version: DGLAB_CONFIG_VERSION,
   enabled: false,
   waveform: "breath",
+  customWaveform: Object.freeze([]),
   channel: "A",
   maxStrength: 30,
   baseStrength: 4,
@@ -46,7 +48,9 @@ export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   const weights = record(source?.weights);
   if (source?.version !== DGLAB_CONFIG_VERSION || weights === null) return null;
   if (typeof source.enabled !== "boolean") return null;
-  if (source.waveform !== "breath" && source.waveform !== "tide") return null;
+  if (source.waveform !== "breath" && source.waveform !== "tide" && source.waveform !== "custom") return null;
+  const customWaveform = normalizeCustomWaveform(source.customWaveform ?? []);
+  if (source.waveform === "custom" && customWaveform === null) return null;
   if (source.channel !== "A" && source.channel !== "B") return null;
   if (!numberInRange(source.maxStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
   if (!numberInRange(source.baseStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
@@ -62,6 +66,7 @@ export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
     version: 1,
     enabled: source.enabled,
     waveform: source.waveform,
+    customWaveform: customWaveform ?? Object.freeze([]),
     channel: source.channel,
     maxStrength: Math.floor(source.maxStrength),
     baseStrength: Math.floor(source.baseStrength),

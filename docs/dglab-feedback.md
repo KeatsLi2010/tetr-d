@@ -30,3 +30,7 @@ DG-LAB 是可选的本地浏览器反馈模块。对局服务器只处理俄罗�
 - 这是非医疗用途的真实电刺激设备。只在自愿、清醒、可随时停止的情况下使用；不要在饮酒、驾驶、洗澡、睡眠或有禁忌症时使用。
 
 参考协议：[DG-LAB 蓝牙协议](https://github.com/dungeonlab-open/dglab-bluetooth-protocol)（[Coyote V3](https://github.com/dungeonlab-open/dglab-bluetooth-protocol/blob/main/coyote/v3/README.md)）。
+
+## 自定义波形
+
+选择“自定义 / Custom”后可以直接编辑帧，或导入 `.json`、`.txt`、`.hex` 文件。每帧表示 100ms，文本格式为 `频率,强度`，频率范围 `10..240`、强度范围 `0..100`，至少 4 帧，最多 240 帧。JSON 支持帧对象数组、二元数组或 `{ "frames": [...] }`；HEX 支持每行一个 16 个十六进制字符的帧。

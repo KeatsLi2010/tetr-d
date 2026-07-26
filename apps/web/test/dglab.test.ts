@@ -6,6 +6,7 @@ import {
   DgLabController,
   createPenaltyCommand,
   normalizeDgLabConfig,
+  parseWaveformText,
   waveformPayload
 } from "../src/dglab/index.ts";
 import type { DgLabPenaltyEvent, DgLabTransport, DgLabTransportMessage } from "../src/dglab/index.ts";
@@ -37,6 +38,25 @@ test("waveform presets are valid V3 100ms payload frames", () => {
     assert.ok(payload.length >= 16);
     assert.ok(payload.every((value) => /^[0-9A-F]{16}$/.test(value)));
   }
+});
+
+test("custom waveforms accept text, JSON and HEX imports", () => {
+  const textFrames = parseWaveformText("12,0\n12,30\n20,80\n20,0");
+  assert.deepEqual(textFrames, [
+    { frequency: 12, intensity: 0 },
+    { frequency: 12, intensity: 30 },
+    { frequency: 20, intensity: 80 },
+    { frequency: 20, intensity: 0 }
+  ]);
+  const jsonFrames = parseWaveformText(JSON.stringify([{ frequency: 30, intensity: 20 }, [40, 60], [50, 80], [60, 0]]));
+  assert.equal(jsonFrames?.length, 4);
+  assert.equal(parseWaveformText(JSON.stringify({ frames: [[30, 20], [40, 60], [50, 80], [60, 0]] }))?.length, 4);
+  const hexFrames = parseWaveformText("0C0C0C0C000A141E\n1414141450505050\n1E1E1E1E64646464\n0A0A0A0A00000000");
+  assert.equal(hexFrames?.[1]?.frequency, 20);
+  assert.equal(hexFrames?.[1]?.intensity, 80);
+  const config = normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, waveform: "custom", customWaveform: textFrames });
+  assert.equal(config?.waveform, "custom");
+  assert.equal(waveformPayload("custom", textFrames).length, 4);
 });
 
 test("b2b break is stronger than a one-step combo", () => {
