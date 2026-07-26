@@ -27,6 +27,7 @@ class FakeTransport implements DgLabTransport {
 }
 
 test("DG-LAB config keeps a local safety ceiling", () => {
+  assert.equal(DEFAULT_DGLAB_CONFIG.weights.b2bBreak, 5);
   const accepted = normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, enabled: true, maxStrength: 200 });
   assert.equal(accepted?.maxStrength, 200);
   const config = normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, enabled: true, maxStrength: 201 });

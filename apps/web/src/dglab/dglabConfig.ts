@@ -19,7 +19,7 @@ export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   cooldownMs: 750,
   maxQueueSeconds: 8,
   weights: Object.freeze({
-    b2bBreak: 7,
+    b2bBreak: 5,
     b2bContinue: 2,
     combo: 1,
     attackReceived: 2,
