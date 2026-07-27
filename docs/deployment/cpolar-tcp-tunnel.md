@@ -31,3 +31,18 @@ HTTP 页面时使用 `http://23.tcp.cpolar.top:14507`，浏览器会自动使用
 
 cpolar 免费 TCP 地址或端口变化时，必须同步更新两份 allowlist，并重新执行
 外部 `/api/health` 和 WebSocket `welcome`/`auth.ok` smoke test。
+
+## 页面穿透与 WebSocket 穿透分离
+
+如果页面由另一条 HTTPS 穿透提供（例如 `https://finer-molly-yearly.ngrok-free.app`
+映射到本机 `4180`），浏览器默认会连接页面同源的
+`wss://finer-molly-yearly.ngrok-free.app/ws`。该页面 Host 和 HTTPS Origin 也
+必须加入 allowlist：
+
+```text
+allowed-origins.txt: https://finer-molly-yearly.ngrok-free.app
+allowed-hosts.txt:   finer-molly-yearly.ngrok-free.app
+```
+
+纯 TCP 的 cpolar 地址不能直接承载 HTTPS 页面的 `wss://` 混合内容请求；优先
+让页面穿透本身转发 WebSocket Upgrade，或在 cpolar TCP 入口前增加 TLS 终止层。
