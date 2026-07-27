@@ -138,7 +138,6 @@ export class DuelRoomSession {
   forfeit(): void {
     this.#commands.forfeit();
   }
-
   setLocalFeedback(feedback: MatchFeedbackState): void { this.#feedbackPublisher.update(feedback); }
 
   leave(): void {
@@ -232,6 +231,7 @@ export class DuelRoomSession {
       this.#commands.reset();
       this.#input?.dispose();
       this.#input = null;
+      if (message.winnerPlayerId !== null && message.winnerPlayerId !== this.#view.player?.playerId) this.#onPenaltyEvent?.({ kind: "defeat", amount: 1, source: "duel" });
       this.#setView({ result: message, feedback: Object.freeze({}) });
       return;
     }
