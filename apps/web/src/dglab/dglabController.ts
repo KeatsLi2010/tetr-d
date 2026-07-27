@@ -43,6 +43,10 @@ function channelNumber(channel: DgLabChannel): 1 | 2 {
   return channel === "A" ? 1 : 2;
 }
 
+function boundedChannelReading(value: number): number {
+  return Math.max(0, Math.min(DGLAB_ABSOLUTE_MAX_STRENGTH, Math.round(value)));
+}
+
 export class DgLabController {
   readonly #now: () => number;
   readonly #createTransport: NonNullable<DgLabControllerOptions["createTransport"]>;
@@ -341,10 +345,10 @@ export class DgLabController {
     if (message.type !== "msg" || typeof message.message !== "string") return;
     const match = /^strength-(\d+)\+(\d+)\+(\d+)\+(\d+)$/.exec(message.message);
     if (match === null) return;
-    const aStrength = Number(match[1]);
-    const bStrength = Number(match[2]);
-    const aLimit = Number(match[3]);
-    const bLimit = Number(match[4]);
+    const aStrength = boundedChannelReading(Number(match[1]));
+    const bStrength = boundedChannelReading(Number(match[2]));
+    const aLimit = boundedChannelReading(Number(match[3]));
+    const bLimit = boundedChannelReading(Number(match[4]));
     if (![aStrength, bStrength, aLimit, bLimit].every(Number.isFinite)) return;
     this.#channels = Object.freeze({
       A: Object.freeze({ strength: aStrength, limit: aLimit }),

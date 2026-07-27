@@ -131,6 +131,11 @@ test("controller exposes Bluetooth connection and both channel readings", () => 
     A: { strength: 12, limit: 40 },
     B: { strength: 7, limit: 30 }
   });
+  fake!.receive({ type: "msg", message: "strength-255+220+255+240" });
+  assert.deepEqual(controller.status.channels, {
+    A: { strength: 200, limit: 200 },
+    B: { strength: 200, limit: 200 }
+  });
   controller.handleEvent({ kind: "b2bBreak", amount: 1, source: "solo" });
   assert.ok(fake!.messages.some((message) => message.type === "clientMsg"));
   const waveformIndex = fake!.messages.findIndex((message) => message.type === "clientMsg");
