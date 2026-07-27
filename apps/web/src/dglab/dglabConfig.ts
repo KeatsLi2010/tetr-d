@@ -1,14 +1,15 @@
 import type { DgLabConfig } from "./dglabTypes.ts";
+import { normalizeCustomWaveform } from "./dglabWaveforms.ts";
 
 export const DGLAB_CONFIG_VERSION = 1 as const;
 export const DGLAB_CONFIG_STORAGE_KEY = "tetr-d.dglab-config.v1";
-export const DGLAB_ABSOLUTE_MAX_STRENGTH = 80;
+export const DGLAB_ABSOLUTE_MAX_STRENGTH = 200;
 
 export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   version: DGLAB_CONFIG_VERSION,
   enabled: false,
-  wsUrl: "",
   waveform: "breath",
+  customWaveform: Object.freeze([]),
   channel: "A",
   maxStrength: 30,
   baseStrength: 4,
@@ -18,7 +19,7 @@ export const DEFAULT_DGLAB_CONFIG: DgLabConfig = Object.freeze({
   cooldownMs: 750,
   maxQueueSeconds: 8,
   weights: Object.freeze({
-    b2bBreak: 7,
+    b2bBreak: 5,
     b2bContinue: 2,
     combo: 1,
     attackReceived: 2,
@@ -42,16 +43,14 @@ function numberInRange(value: unknown, min: number, max: number): value is numbe
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
 
-function text(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length <= maxLength;
-}
-
 export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   const source = record(value);
   const weights = record(source?.weights);
   if (source?.version !== DGLAB_CONFIG_VERSION || weights === null) return null;
-  if (typeof source.enabled !== "boolean" || !text(source.wsUrl, 512)) return null;
-  if (source.waveform !== "breath" && source.waveform !== "tide") return null;
+  if (typeof source.enabled !== "boolean") return null;
+  if (source.waveform !== "breath" && source.waveform !== "tide" && source.waveform !== "custom") return null;
+  const customWaveform = normalizeCustomWaveform(source.customWaveform ?? []);
+  if (source.waveform === "custom" && customWaveform === null) return null;
   if (source.channel !== "A" && source.channel !== "B") return null;
   if (!numberInRange(source.maxStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
   if (!numberInRange(source.baseStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
@@ -66,8 +65,8 @@ export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   return Object.freeze({
     version: 1,
     enabled: source.enabled,
-    wsUrl: source.wsUrl.trim(),
     waveform: source.waveform,
+    customWaveform: customWaveform ?? Object.freeze([]),
     channel: source.channel,
     maxStrength: Math.floor(source.maxStrength),
     baseStrength: Math.floor(source.baseStrength),

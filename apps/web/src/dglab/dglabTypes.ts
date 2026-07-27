@@ -1,6 +1,13 @@
 export type DgLabChannel = "A" | "B";
 
-export type DgLabWaveformId = "breath" | "tide";
+export type DgLabWaveformId = "breath" | "tide" | "custom";
+
+export interface DgLabWaveformFrame {
+  readonly frequency: number;
+  readonly intensity: number;
+  readonly frequencySteps?: readonly [number, number, number, number];
+  readonly intensitySteps?: readonly [number, number, number, number];
+}
 
 export type DgLabPenaltyEventKind =
   | "b2bBreak"
@@ -26,8 +33,8 @@ export interface DgLabPenaltyWeights {
 export interface DgLabConfig {
   readonly version: 1;
   readonly enabled: boolean;
-  readonly wsUrl: string;
   readonly waveform: DgLabWaveformId;
+  readonly customWaveform: readonly DgLabWaveformFrame[];
   readonly channel: DgLabChannel;
   readonly maxStrength: number;
   readonly baseStrength: number;
@@ -42,7 +49,6 @@ export interface DgLabConfig {
 export type DgLabConnectionStatus =
   | "offline"
   | "connecting"
-  | "waiting-bind"
   | "paired"
   | "error";
 
@@ -54,7 +60,6 @@ export interface DgLabChannelState {
 export interface DgLabStatus {
   readonly connection: DgLabConnectionStatus;
   readonly armed: boolean;
-  readonly pairingUrl: string | null;
   readonly channels: Readonly<Record<DgLabChannel, DgLabChannelState>>;
   readonly queuedSeconds: number;
   readonly lastError: string | null;
@@ -68,12 +73,14 @@ export interface DgLabTransportMessage {
   readonly channel?: string | number;
   readonly strength?: number;
   readonly time?: number;
+  readonly durationMs?: number;
 }
 
 export interface DgLabTransport {
-  readonly connect: () => void;
+  readonly connect: (forceChooser?: boolean) => void;
   readonly close: () => void;
   readonly send: (message: DgLabTransportMessage) => void;
+  readonly setSafetyLimit?: (strength: number) => void;
   readonly subscribe: (listener: (message: DgLabTransportMessage) => void) => () => void;
   readonly status: DgLabConnectionStatus;
 }

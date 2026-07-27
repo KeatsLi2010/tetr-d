@@ -259,6 +259,7 @@ export class RealtimeService {
     }
     this.#connections.unbind(context);
     if (session.roomId === null) return;
+    this.#matchMessages?.clearFeedback(context.player.playerId);
     try {
       await this.#connectionDispatchRetrier.connectionLost(
         context,

@@ -134,7 +134,9 @@ export class GatewayConnection {
       this.#invalid("Message failed schema validation.");
       return;
     }
-    const tier = message.type === "match.input" ? "match.input" : "general";
+    const tier = message.type === "match.input"
+      ? "match.input"
+      : message.type === "match.feedback" ? "match.feedback" : "general";
     const decision = this.#rateLimiter.consume(this.#connectionId, tier);
     if (!decision.allowed) {
       this.#sendError(

@@ -1,4 +1,4 @@
-export type MessageRateTier = "general" | "match.input";
+export type MessageRateTier = "general" | "match.input" | "match.feedback";
 
 export interface TokenBucketQuota {
   /** Maximum burst size. */
@@ -48,6 +48,10 @@ const DEFAULT_QUOTAS: Readonly<Record<MessageRateTier, TokenBucketQuota>> =
     "match.input": Object.freeze({
       capacity: 240,
       refillPerSecond: 120
+    }),
+    "match.feedback": Object.freeze({
+      capacity: 20,
+      refillPerSecond: 10
     })
   });
 
@@ -113,6 +117,9 @@ export class ConnectionRateLimiter {
       ),
       "match.input": validateQuota(
         options.quotas?.["match.input"] ?? DEFAULT_QUOTAS["match.input"]
+      ),
+      "match.feedback": validateQuota(
+        options.quotas?.["match.feedback"] ?? DEFAULT_QUOTAS["match.feedback"]
       )
     });
   }
@@ -207,6 +214,10 @@ export class ConnectionRateLimiter {
         },
         "match.input": {
           tokens: this.#quotas["match.input"].capacity,
+          updatedAtMs: nowMs
+        },
+        "match.feedback": {
+          tokens: this.#quotas["match.feedback"].capacity,
           updatedAtMs: nowMs
         }
       }

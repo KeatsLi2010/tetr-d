@@ -1,6 +1,7 @@
 import type {
   ClientMessage,
   InputAcknowledgement,
+  MatchFeedbackState,
   MatchServerMessage,
   ServerMessage
 } from "@tetr-d/protocol";
@@ -12,6 +13,7 @@ import { INITIAL_DUEL_ROOM_VIEW } from "./initialDuelRoomView.ts";
 import { MatchDeltaReceiver } from "./MatchDeltaReceiver.ts";
 import { DuelTransport } from "./DuelTransport.ts";
 import { DuelPenaltyDetector } from "./duelPenaltyDetector.ts";
+import { DuelFeedbackPublisher, initialDuelFeedback, mergeDuelFeedback } from "./DuelFeedbackPublisher.ts";
 import type { DgLabPenaltyEvent } from "../../dglab/dglabTypes.ts";
 import type {
   DuelRoomView,
@@ -49,10 +51,12 @@ export class DuelRoomSession {
   readonly #penaltyDetector = new DuelPenaltyDetector();
   readonly #onPenaltyEvent: ((event: DgLabPenaltyEvent) => void) | undefined;
   #lastSelfCursor: number | null = null;
+  readonly #feedbackPublisher: DuelFeedbackPublisher;
 
   constructor(config: PlayerConfig, onPenaltyEvent?: (event: DgLabPenaltyEvent) => void) {
     this.#config = config;
     this.#onPenaltyEvent = onPenaltyEvent;
+    this.#feedbackPublisher = new DuelFeedbackPublisher(() => this.#view.match?.matchId, (message) => this.#send(message));
     this.#commands = new DuelRoomCommands({
       getView: () => this.#view,
       send: (message) => this.#send(message)
@@ -73,17 +77,14 @@ export class DuelRoomSession {
       }
     });
   }
-
   get view(): DuelRoomView {
     return this.#view;
   }
-
   subscribe(listener: Listener): () => void {
     this.#listeners.add(listener);
     listener(this.#view, "control");
     return () => this.#listeners.delete(listener);
   }
-
   async resumeSaved(): Promise<boolean> {
     if (!this.#transport.hasSavedSession()) return false;
     this.#setView({ connection: "connecting", error: null });
@@ -99,27 +100,22 @@ export class DuelRoomSession {
     }
     return resumed;
   }
-
   async createRoom(input: EnterRoomInput): Promise<void> {
     await this.#enter(input, null);
   }
-
   async joinRoom(input: EnterRoomInput): Promise<void> {
     const roomCode = input.roomCode?.trim().toUpperCase() ?? "";
     if (roomCode.length === 0) throw new Error("请输入房间码。");
     await this.#enter(input, roomCode);
   }
-
   setReady(ready: boolean): void {
     this.#commands.setReady(ready);
   }
-
   updateSettings(
     patch: Parameters<DuelRoomCommands["updateSettings"]>[0]
   ): void {
     this.#commands.updateSettings(patch);
   }
-
   nextRound(): void {
     const room = this.#view.room;
     if (
@@ -132,7 +128,8 @@ export class DuelRoomSession {
       this.#setView({
         match: null,
         players: Object.freeze([]),
-        frameAnchor: null
+        frameAnchor: null,
+        feedback: Object.freeze({})
       });
     }
     this.#commands.nextRound();
@@ -141,6 +138,8 @@ export class DuelRoomSession {
   forfeit(): void {
     this.#commands.forfeit();
   }
+
+  setLocalFeedback(feedback: MatchFeedbackState): void { this.#feedbackPublisher.update(feedback); }
 
   leave(): void {
     const room = this.#view.room;
@@ -160,6 +159,7 @@ export class DuelRoomSession {
   }
 
   dispose(): void {
+    this.#feedbackPublisher.dispose();
     this.#input?.dispose();
     this.#transport.dispose();
     this.#listeners.clear();
@@ -222,12 +222,17 @@ export class DuelRoomSession {
       this.#acceptAcknowledgement(message);
       return;
     }
+    if (message.type === "match.feedback") {
+      if (message.matchId !== this.#view.match?.matchId) return;
+      this.#setView({ feedback: mergeDuelFeedback(this.#view.feedback, message.playerId, message.feedback) });
+      return;
+    }
     if (message.type === "match.end") {
       if (message.matchId !== this.#view.match?.matchId) return;
       this.#commands.reset();
       this.#input?.dispose();
       this.#input = null;
-      this.#setView({ result: message });
+      this.#setView({ result: message, feedback: Object.freeze({}) });
       return;
     }
     if (message.type === "room.removed" || message.type === "room.closed") {
@@ -259,6 +264,7 @@ export class DuelRoomSession {
     this.#setView({
       match: message,
       players: Object.freeze([]),
+      feedback: initialDuelFeedback(message.players),
       result: null,
       frameAnchor: {
         serverFrame: message.serverFrame,
@@ -266,6 +272,7 @@ export class DuelRoomSession {
       },
       error: null
     });
+    this.#feedbackPublisher.start();
     if (message.inputEpoch === null) return;
     this.#input = new DuelMatchInput({
       config: this.#config,

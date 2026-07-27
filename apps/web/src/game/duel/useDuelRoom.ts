@@ -6,6 +6,7 @@ import {
 } from "react";
 
 import type { PlayerConfig } from "../../config/v3/index.ts";
+import type { MatchFeedbackState } from "@tetr-d/protocol";
 import type { DgLabPenaltyEvent } from "../../dglab/dglabTypes.ts";
 import {
   BROWSER_FRAME_SCHEDULER,
@@ -26,12 +27,14 @@ const EMPTY_VIEW: DuelRoomView = {
   players: [],
   result: null,
   frameAnchor: null,
+  feedback: {},
   error: null
 };
 
 export function useDuelRoom(
   config: PlayerConfig,
-  onPenaltyEvent?: (event: DgLabPenaltyEvent) => void
+  onPenaltyEvent?: (event: DgLabPenaltyEvent) => void,
+  localFeedback?: MatchFeedbackState
 ): DuelRoomView & DuelRoomActions {
   const initialConfig = useRef(config).current;
   const sessionRef = useRef<DuelRoomSession | null>(null);
@@ -59,6 +62,10 @@ export function useDuelRoom(
       if (sessionRef.current === session) sessionRef.current = null;
     };
   }, [initialConfig, onPenaltyEvent]);
+
+  useEffect(() => {
+    if (localFeedback !== undefined) sessionRef.current?.setLocalFeedback(localFeedback);
+  }, [localFeedback]);
 
   const requireSession = useCallback((): DuelRoomSession => {
     const session = sessionRef.current;

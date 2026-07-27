@@ -13,6 +13,7 @@ import { projectMatchUpdate } from "./matchDeltaProjection.ts";
 import { MatchDeliveryBaselines } from "./matchDeliveryBaselines.ts";
 import { projectMatchSnapshot } from "./matchProjection.ts";
 import { MatchReplayPersistence } from "./matchReplayPersistence.ts";
+import { MatchFeedbackRegistry } from "./matchFeedbackRegistry.ts";
 
 export interface StartRegisteredMatch {
   readonly matchId: string;
@@ -54,6 +55,7 @@ export class MatchRegistry {
   readonly #onError: (error: unknown) => void;
   readonly #matches = new Map<string, MatchCoordinator>();
   readonly #inputGenerations = new Map<string, Map<string, number>>();
+  readonly feedback = new MatchFeedbackRegistry();
   readonly #delivery = new MatchDeliveryBaselines();
   readonly #loop: FixedStepLoop;
   readonly #replays: MatchReplayPersistence;
@@ -94,9 +96,7 @@ export class MatchRegistry {
   }
 
   get matchCount(): number { return this.#matches.size; }
-
   get loopState(): FixedStepLoopState { return this.#loop.state; }
-
   get(matchId: string): MatchCoordinator | null {
     return this.#matches.get(matchId) ?? null;
   }
@@ -127,6 +127,7 @@ export class MatchRegistry {
       onError: (error) => this.#report(error)
     });
     this.#matches.set(input.matchId, coordinator);
+    this.feedback.start(input.matchId);
     this.#replays.start({
       matchId: input.matchId,
       players: input.players,
@@ -140,6 +141,7 @@ export class MatchRegistry {
     if (this.#loop.state !== "running") {
       this.#matches.delete(input.matchId);
       this.#inputGenerations.delete(input.matchId);
+      this.feedback.delete(input.matchId);
       coordinator.close();
       void this.#replays.closePartial(input.matchId);
       throw new Error("Match simulation loop is unavailable.");
@@ -155,16 +157,11 @@ export class MatchRegistry {
       this.#matches.delete(matchId);
       this.#inputGenerations.delete(matchId);
       this.#delivery.clearMatch(matchId);
+      this.feedback.delete(matchId);
     }
     if (this.#matches.size === 0 && this.#loop.state === "running") {
       this.#loop.pause();
     }
-  }
-
-  sendStart(playerId: string, matchId: string): boolean {
-    const coordinator = this.#matches.get(matchId);
-    return coordinator !== undefined &&
-      this.#sendPlayer(playerId, coordinator.startMessage(playerId));
   }
 
   resumePlayer(playerId: string): boolean {
@@ -182,7 +179,8 @@ export class MatchRegistry {
         connected: true
       });
     }
-    const started = this.sendStart(playerId, match.view.matchId);
+    const started = this.#sendPlayer(playerId, match.startMessage(playerId));
+    for (const message of this.feedback.snapshots(match.view.matchId, match.view.participants)) this.#sendPlayer(playerId, message);
     const snapshotted = this.sendSnapshot(playerId, match.view.matchId);
     return started || snapshotted;
   }
@@ -261,6 +259,7 @@ export class MatchRegistry {
     void this.#replays.closeAllPartials();
     this.#matches.clear();
     this.#inputGenerations.clear();
+    this.feedback.clearAll();
     this.#delivery.clear();
   }
 
@@ -323,6 +322,7 @@ export class MatchRegistry {
     this.#matches.delete(matchId);
     this.#inputGenerations.delete(matchId);
     this.#delivery.clearMatch(matchId);
+    this.feedback.delete(matchId);
     if (this.#matches.size === 0 && this.#loop.state === "running") {
       this.#loop.pause();
     }

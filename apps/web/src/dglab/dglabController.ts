@@ -3,8 +3,8 @@ import {
   DEFAULT_DGLAB_CONFIG,
   normalizeDgLabConfig
 } from "./dglabConfig.ts";
+import { DgLabBluetoothTransport } from "./dglabBluetooth.ts";
 import { cancellationPoints, createPenaltyCommand } from "./dglabPolicy.ts";
-import { DgLabSocketTransport, makePairingUrl } from "./dglabSocket.ts";
 import { waveformPayload } from "./dglabWaveforms.ts";
 import type {
   DgLabChannel,
@@ -19,8 +19,8 @@ import type {
 export interface DgLabControllerOptions {
   readonly now?: () => number;
   readonly createTransport?: (
-    url: string,
-    onStatus: (status: DgLabStatus["connection"], clientId: string | null) => void
+    onStatus: (status: DgLabStatus["connection"], clientId: string | null, error?: string) => void,
+    config: DgLabConfig
   ) => DgLabTransport;
 }
 
@@ -28,6 +28,7 @@ interface QueuedCommand {
   readonly strength: number;
   readonly durationMs: number;
   readonly points: number;
+  readonly expiresAt: number;
 }
 
 type Listener = (status: DgLabStatus) => void;
@@ -41,10 +42,6 @@ function channelNumber(channel: DgLabChannel): 1 | 2 {
   return channel === "A" ? 1 : 2;
 }
 
-function nonNegative(value: number): number {
-  return Math.max(0, Number.isFinite(value) ? value : 0);
-}
-
 export class DgLabController {
   readonly #now: () => number;
   readonly #createTransport: NonNullable<DgLabControllerOptions["createTransport"]>;
@@ -53,28 +50,30 @@ export class DgLabController {
   #transport: DgLabTransport | null = null;
   #unsubscribeTransport: (() => void) | null = null;
   #connection: DgLabStatus["connection"] = "offline";
-  #clientId: string | null = null;
-  #pairingUrl: string | null = null;
   #channels = INITIAL_CHANNELS;
   #armed = false;
   #lastError: string | null = null;
   #queue: QueuedCommand[] = [];
+  #decayTimer: ReturnType<typeof setTimeout> | null = null;
   #activeTimer: ReturnType<typeof setTimeout> | null = null;
+  #lastSentStrength = 0;
   #lastEventAt = -Infinity;
 
   constructor(config: DgLabConfig = DEFAULT_DGLAB_CONFIG, options: DgLabControllerOptions = {}) {
     this.#config = normalizeDgLabConfig(config) ?? DEFAULT_DGLAB_CONFIG;
     this.#now = options.now ?? (() => globalThis.performance.now());
-    this.#createTransport = options.createTransport ?? ((url, onStatus) => new DgLabSocketTransport(url, onStatus));
+    this.#createTransport = options.createTransport ?? ((onStatus, currentConfig) => new DgLabBluetoothTransport({ maxStrength: currentConfig.maxStrength }, onStatus));
   }
 
   get status(): DgLabStatus {
     return Object.freeze({
       connection: this.#connection,
       armed: this.#armed,
-      pairingUrl: this.#pairingUrl,
       channels: this.#channels,
-      queuedSeconds: this.#queue.reduce((sum, item) => sum + item.durationMs, 0) / 1_000,
+      queuedSeconds: this.#queue.reduce(
+        (sum, item) => sum + Math.max(0, item.expiresAt - this.#now()),
+        0
+      ) / 1_000,
       lastError: this.#lastError
     });
   }
@@ -83,6 +82,7 @@ export class DgLabController {
     const normalized = normalizeDgLabConfig(config);
     if (normalized === null) throw new TypeError("Invalid DG-LAB config.");
     this.#config = normalized;
+    this.#transport?.setSafetyLimit?.(normalized.maxStrength);
     if (!normalized.enabled) this.disarm();
     this.#publish();
   }
@@ -93,27 +93,26 @@ export class DgLabController {
     return () => this.#listeners.delete(listener);
   }
 
-  connect(): void {
+  connect(forceChooser = false): void {
     this.#clearError();
     this.#disposeTransport();
-    if (!this.#config.wsUrl) {
-      this.#fail("请先填写 DG-LAB WebSocket 中继地址。");
-      return;
-    }
     this.#connection = "connecting";
-    const transport = this.#createTransport(this.#config.wsUrl, (status, clientId) => {
+    const transport = this.#createTransport((status, _clientId, error) => {
       this.#connection = status;
-      if (clientId !== null) {
-        this.#clientId = clientId;
-        this.#pairingUrl = makePairingUrl(this.#config.wsUrl, clientId);
+      if (status === "paired") {
+        if (error === undefined || error.length === 0) this.#clearError();
+        else this.#lastError = `蓝牙提示：${error}`;
       }
+      if (status === "error") this.#lastError = error === undefined || error.length === 0
+        ? "蓝牙连接失败，请确认使用 HTTPS/Chrome 并选择郊狼 3.0。"
+        : `蓝牙错误：${error}`;
       if (status !== "paired") this.#armed = false;
       if (status === "offline" || status === "error") this.#stopOutput(true);
       this.#publish();
-    });
+    }, this.#config);
     this.#transport = transport;
     this.#unsubscribeTransport = transport.subscribe((message) => this.#receive(message));
-    transport.connect();
+    transport.connect(forceChooser);
     this.#publish();
   }
 
@@ -121,14 +120,16 @@ export class DgLabController {
     this.disarm();
     this.#disposeTransport();
     this.#connection = "offline";
-    this.#pairingUrl = null;
-    this.#clientId = null;
     this.#publish();
   }
 
   arm(): boolean {
-    if (!this.#config.enabled || this.#connection !== "paired") {
-      this.#fail("请先启用 DG-LAB 并完成 App 扫码配对。");
+    if (!this.#config.enabled) {
+      this.#fail("请先在 DG-LAB 设置中勾选“启用反馈”。");
+      return false;
+    }
+    if (this.#connection !== "paired") {
+      this.#fail("请先选择蓝牙设备并等待状态变为“已连接”。");
       return false;
     }
     if (this.#config.maxStrength > DGLAB_ABSOLUTE_MAX_STRENGTH) {
@@ -151,8 +152,8 @@ export class DgLabController {
     if (!this.#armed || this.#transport === null) return false;
     const strength = Math.min(this.#config.maxStrength, Math.max(1, this.#config.baseStrength));
     try {
-      this.#sendStrength(strength);
       this.#sendWaveform(Math.min(750, this.#config.baseDurationMs));
+      this.#sendStrength(strength);
       return true;
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 测试输出失败。");
@@ -175,18 +176,64 @@ export class DgLabController {
     const maxMs = this.#config.maxQueueSeconds * 1_000;
     const queuedMs = this.#queue.reduce((sum, item) => sum + item.durationMs, 0);
     if (queuedMs >= maxMs) return;
+    const durationMs = Math.min(command.durationMs, maxMs - queuedMs);
     this.#queue.push({
       points: command.points,
       strength: Math.min(command.strength, this.#config.maxStrength),
-      durationMs: Math.min(command.durationMs, maxMs - queuedMs)
+      durationMs,
+      expiresAt: now + durationMs
     });
     this.#publish();
-    if (this.#activeTimer === null) this.#pump();
+    this.#refreshOutput();
   }
 
   dispose(): void {
     this.disconnect();
     this.#listeners.clear();
+  }
+
+  /** Accumulate event points, then let each contribution expire naturally. */
+  #refreshOutput(): void {
+    if (this.#decayTimer !== null) clearTimeout(this.#decayTimer);
+    this.#decayTimer = null;
+    const now = this.#now();
+    this.#queue = this.#queue.filter((item) => item.expiresAt > now);
+    if (!this.#armed || this.#transport === null) {
+      this.#publish();
+      return;
+    }
+    const points = this.#queue.reduce((sum, item) => sum + item.points, 0);
+    const strength = points <= 0
+      ? 0
+      : Math.min(
+        this.#config.maxStrength,
+        Math.max(0, Math.round(this.#config.baseStrength + points * this.#config.strengthPerPoint))
+      );
+    try {
+      if (strength > 0) {
+        if (this.#lastSentStrength <= 0) {
+          this.#sendWaveform(this.#config.maxQueueSeconds * 1_000);
+        }
+        this.#sendStrength(strength);
+      } else if (this.#lastSentStrength > 0) {
+        this.#sendClear();
+      }
+      this.#lastSentStrength = strength;
+    } catch (error) {
+      this.#fail(error instanceof Error ? error.message : "DG-LAB output failed.");
+      return;
+    }
+    const nextExpiry = this.#queue.reduce(
+      (soonest, item) => Math.min(soonest, item.expiresAt),
+      Number.POSITIVE_INFINITY
+    );
+    if (Number.isFinite(nextExpiry)) {
+      this.#decayTimer = setTimeout(
+        () => this.#refreshOutput(),
+        Math.max(1, nextExpiry - now)
+      );
+    }
+    this.#publish();
   }
 
   #pump(): void {
@@ -196,8 +243,8 @@ export class DgLabController {
       return;
     }
     try {
-      this.#sendStrength(next.strength);
       this.#sendWaveform(next.durationMs);
+      this.#sendStrength(next.strength);
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 输出失败。");
       return;
@@ -222,14 +269,14 @@ export class DgLabController {
         this.#queue[this.#queue.length - 1] = Object.freeze({
           ...item,
           points: item.points - remaining,
-          durationMs: Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points))
+          durationMs: Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points)),
+          expiresAt: this.#now() + Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points))
         });
         remaining = 0;
       }
     }
     try {
-      this.#sendClear();
-      if (this.#queue.length > 0 && this.#activeTimer === null) this.#pump();
+      this.#refreshOutput();
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB 取消输出失败。");
     }
@@ -247,7 +294,8 @@ export class DgLabController {
       type: "clientMsg",
       channel,
       time,
-      message: `${channel}:${JSON.stringify(waveformPayload(this.#config.waveform))}`
+      durationMs,
+      message: `${channel}:${JSON.stringify(waveformPayload(this.#config.waveform, this.#config.customWaveform))}`
     });
   }
 
@@ -258,9 +306,12 @@ export class DgLabController {
   }
 
   #stopOutput(clearDevice: boolean): void {
+    if (this.#decayTimer !== null) clearTimeout(this.#decayTimer);
+    this.#decayTimer = null;
     if (this.#activeTimer !== null) clearTimeout(this.#activeTimer);
     this.#activeTimer = null;
     this.#queue = [];
+    this.#lastSentStrength = 0;
     if (clearDevice && this.#transport !== null) {
       try { this.#sendClear(); } catch { /* disconnect/stop is best effort */ }
     }

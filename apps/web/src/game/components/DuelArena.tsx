@@ -8,7 +8,9 @@ import type { ServerFrameAnchor } from "../duel/garbagePreviewModel.ts";
 import type { NetworkPlayerState } from "../duel/networkPlayerState.ts";
 import { PlayerWell } from "./PlayerWell.tsx";
 import { DgLabControlPanel } from "../../dglab/DgLabControlPanel.tsx";
+import { DgLabDuelFeedback } from "../../dglab/DgLabDuelFeedback.tsx";
 import type { DgLabPenaltyState } from "../../dglab/useDgLabPenalty.ts";
+import type { MatchFeedbackState } from "@tetr-d/protocol";
 
 export interface DuelArenaProps {
   readonly selfPlayerId: string;
@@ -22,6 +24,7 @@ export interface DuelArenaProps {
   readonly onForfeit: () => void;
   readonly onNextRound: () => void;
   readonly dglab?: DgLabPenaltyState;
+  readonly feedback: Readonly<Record<string, MatchFeedbackState>>;
 }
 
 export function DuelArena({
@@ -35,7 +38,8 @@ export function DuelArena({
   error,
   onForfeit,
   onNextRound,
-  dglab
+  dglab,
+  feedback
 }: DuelArenaProps): React.JSX.Element {
   const wins = room.series?.wins ?? [0, 0];
   const canContinue =
@@ -67,6 +71,11 @@ export function DuelArena({
       </header>
 
       {dglab !== undefined && <DgLabControlPanel penalty={dglab} />}
+      <DgLabDuelFeedback
+        feedback={feedback}
+        players={match.players}
+        selfPlayerId={selfPlayerId}
+      />
 
       <section className="duel-arena__boards">
         {match.players.map((identity, seat) => {

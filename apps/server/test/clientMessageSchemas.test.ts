@@ -161,3 +161,24 @@ test("match input accepts discrete actions and bounds drop steps", () => {
     null
   );
 });
+
+test("match feedback accepts bounded ephemeral channel readings", () => {
+  assert.ok(parseClientMessage({
+    type: "match.feedback",
+    matchId: "match-1",
+    visible: true,
+    connected: true,
+    armed: true,
+    channelA: { strength: 80, limit: 200 },
+    channelB: { strength: 0, limit: 200 }
+  }));
+  assert.equal(parseClientMessage({
+    type: "match.feedback",
+    matchId: "match-1",
+    visible: true,
+    connected: true,
+    armed: true,
+    channelA: { strength: 201, limit: 200 },
+    channelB: { strength: 0, limit: 200 }
+  }), null);
+});

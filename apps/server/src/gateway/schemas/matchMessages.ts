@@ -77,8 +77,28 @@ export const matchResyncMessageSchema = z
   })
   .strict();
 
+const feedbackChannelSchema = z
+  .object({
+    strength: z.number().int().min(0).max(200),
+    limit: z.number().int().min(0).max(200)
+  })
+  .strict();
+
+export const matchFeedbackMessageSchema = z
+  .object({
+    type: z.literal("match.feedback"),
+    matchId: matchIdSchema,
+    visible: z.boolean(),
+    connected: z.boolean(),
+    armed: z.boolean(),
+    channelA: feedbackChannelSchema,
+    channelB: feedbackChannelSchema
+  })
+  .strict();
+
 export const matchClientMessageSchema = z.discriminatedUnion("type", [
   matchForfeitMessageSchema,
   matchInputMessageSchema,
-  matchResyncMessageSchema
+  matchResyncMessageSchema,
+  matchFeedbackMessageSchema
 ]);
