@@ -18,3 +18,8 @@ contributions first.
 Every contribution has its own expiry. Expiration recalculates the target
 strength, producing natural decay instead of resetting the device on every
 event. A zero target sends the normal clear/zero-strength command.
+
+When the local player loses a solo run or authoritative duel, the browser
+emits one `defeat` event. It overrides the active target to the configured
+local maximum for exactly 10 seconds, bypasses the normal event cooldown, and
+then expires through the same local clear path. A draw does not trigger it.

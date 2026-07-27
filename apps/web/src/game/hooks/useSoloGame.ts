@@ -51,6 +51,8 @@ export function useSoloGame(
     const controller = new GameHandlingController(config, { startTimeMs });
     let previousBackToBack = 0;
     let previousCombo = -1;
+    let wasPlaying = false;
+    let defeatReported = false;
     const session = new SoloGameSession({
       seed: makeSeed(),
       now: monotonicNow,
@@ -66,14 +68,23 @@ export function useSoloGame(
       },
       onClockReanchored: (atMs) => controller.clear(atMs)
     });
+    const publishSnapshot = (next: GameSessionSnapshot): void => {
+      if (next.phase === "playing" && !wasPlaying) defeatReported = false;
+      if (!defeatReported && wasPlaying && next.phase === "ended") {
+        defeatReported = true;
+        onPenaltyEvent?.({ kind: "defeat", amount: 1, source: "solo" });
+      }
+      wasPlaying = next.phase === "playing";
+      setSnapshot(next);
+    };
     const bundle = { controller, session };
     const allCodes = configuredCodes(config);
     const pauseCodes = new Set(config.bindings.forfeit);
     const retryCodes = new Set(config.bindings.retry);
     bundleRef.current = bundle;
-    setSnapshot(session.snapshot);
+    publishSnapshot(session.snapshot);
 
-    const unsubscribe = session.subscribe(setSnapshot);
+    const unsubscribe = session.subscribe(publishSnapshot);
     let animationFrame = 0;
 
     const pause = (atMs: number): void => {
@@ -87,6 +98,8 @@ export function useSoloGame(
       controller.clear(atMs);
       previousBackToBack = 0;
       previousCombo = -1;
+      wasPlaying = false;
+      defeatReported = false;
       session.restart();
     };
 

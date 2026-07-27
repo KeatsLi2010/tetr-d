@@ -14,7 +14,8 @@ export type DgLabPenaltyEventKind =
   | "b2bContinue"
   | "combo"
   | "attackReceived"
-  | "attackCancelled";
+  | "attackCancelled"
+  | "defeat";
 
 export interface DgLabPenaltyEvent {
   readonly kind: DgLabPenaltyEventKind;

@@ -23,6 +23,7 @@
 .dglab-weight-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dglab-weight-row input { width: 64px; min-height: 30px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--text); background: rgba(5, 8, 14, .55); }
 .dglab-safety-note { padding: 14px 18px 18px; border-top: 1px solid var(--line-soft); color: #d7b38c; background: rgba(118, 72, 25, .08); font-size: 10px; line-height: 1.7; }
+.dglab-defeat-note { margin: 0; padding: 10px 18px; border-top: 1px solid rgba(255, 113, 139, .16); color: #ffc2cb; background: rgba(255, 113, 139, .045); font-family: var(--font-mono); font-size: 9px; line-height: 1.6; }
 .dglab-control { display: grid; gap: 14px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 14px; color: var(--text-soft); background: rgba(13, 17, 28, .84); box-shadow: var(--shadow-glow); }
 .duel-arena > .dglab-control { width: min(1080px, 100%); margin: 0 auto 12px; }
 .dglab-control__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -104,6 +104,19 @@ test("penalty command keeps continuation fixed while scaling counts", () => {
   assert.equal(continueOne.points, DEFAULT_DGLAB_CONFIG.weights.b2bContinue);
 });
 
+test("defeat command is a fixed local maximum for ten seconds", () => {
+  const defeat = createPenaltyCommand({ kind: "defeat", amount: 1, source: "duel" }, {
+    ...DEFAULT_DGLAB_CONFIG,
+    maxStrength: 123
+  });
+  assert.deepEqual(defeat, {
+    points: 0,
+    strength: 123,
+    durationMs: 10_000,
+    forceMax: true
+  });
+});
+
 test("controller exposes Bluetooth connection and both channel readings", () => {
   let fake: FakeTransport | null = null;
   const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true }, {
@@ -147,6 +160,19 @@ test("controller adds penalty points, cancels newest points, and schedules decay
   now += 1;
   controller.handleEvent({ kind: "attackCancelled", amount: 1, source: "duel" });
   assert.equal(strengths().at(-1), 16);
+  controller.dispose();
+});
+
+test("controller emits a defeat at the configured maximum", () => {
+  let fake: FakeTransport | null = null;
+  const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true, maxStrength: 123 }, {
+    createTransport: (onStatus) => { fake = new FakeTransport(onStatus); return fake; }
+  });
+  controller.connect();
+  assert.equal(controller.arm(), true);
+  controller.handleEvent({ kind: "defeat", amount: 1, source: "duel" });
+  assert.equal(fake!.messages.filter((message) => message.type === 3).at(-1)?.strength, 123);
+  assert.equal(fake!.messages.find((message) => message.type === "clientMsg")?.durationMs, 10_000);
   controller.dispose();
 });
 

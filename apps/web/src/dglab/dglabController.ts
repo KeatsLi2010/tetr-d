@@ -29,6 +29,7 @@ interface QueuedCommand {
   readonly durationMs: number;
   readonly points: number;
   readonly expiresAt: number;
+  readonly forceMax: boolean;
 }
 
 type Listener = (status: DgLabStatus) => void;
@@ -164,7 +165,7 @@ export class DgLabController {
   handleEvent(event: DgLabPenaltyEvent): void {
     if (!this.#armed || this.#transport === null) return;
     const now = this.#now();
-    if (now - this.#lastEventAt < this.#config.cooldownMs && event.kind !== "attackCancelled") return;
+    if (now - this.#lastEventAt < this.#config.cooldownMs && event.kind !== "attackCancelled" && event.kind !== "defeat") return;
     this.#lastEventAt = now;
     const cancellation = cancellationPoints(event, this.#config);
     if (cancellation > 0) {
@@ -173,6 +174,17 @@ export class DgLabController {
     }
     const command = createPenaltyCommand(event, this.#config);
     if (command === null) return;
+    if (command.forceMax === true) {
+      this.#queue = [{
+        points: 0,
+        strength: this.#config.maxStrength,
+        durationMs: command.durationMs,
+        expiresAt: now + command.durationMs,
+        forceMax: true
+      }];
+      this.#refreshOutput();
+      return;
+    }
     const maxMs = this.#config.maxQueueSeconds * 1_000;
     const queuedMs = this.#queue.reduce((sum, item) => sum + item.durationMs, 0);
     if (queuedMs >= maxMs) return;
@@ -181,7 +193,8 @@ export class DgLabController {
       points: command.points,
       strength: Math.min(command.strength, this.#config.maxStrength),
       durationMs,
-      expiresAt: now + durationMs
+      expiresAt: now + durationMs,
+      forceMax: false
     });
     this.#publish();
     this.#refreshOutput();
@@ -203,7 +216,9 @@ export class DgLabController {
       return;
     }
     const points = this.#queue.reduce((sum, item) => sum + item.points, 0);
-    const strength = points <= 0
+    const strength = this.#queue.some((item) => item.forceMax)
+      ? this.#config.maxStrength
+      : points <= 0
       ? 0
       : Math.min(
         this.#config.maxStrength,
@@ -212,7 +227,11 @@ export class DgLabController {
     try {
       if (strength > 0) {
         if (this.#lastSentStrength <= 0) {
-          this.#sendWaveform(this.#config.maxQueueSeconds * 1_000);
+          const waveformDuration = this.#queue.reduce(
+            (longest, item) => Math.max(longest, item.durationMs),
+            this.#config.maxQueueSeconds * 1_000
+          );
+          this.#sendWaveform(waveformDuration);
         }
         this.#sendStrength(strength);
       } else if (this.#lastSentStrength > 0) {
@@ -270,7 +289,8 @@ export class DgLabController {
           ...item,
           points: item.points - remaining,
           durationMs: Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points)),
-          expiresAt: this.#now() + Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points))
+          expiresAt: this.#now() + Math.max(100, Math.floor(item.durationMs * (item.points - remaining) / item.points)),
+          forceMax: item.forceMax
         });
         remaining = 0;
       }

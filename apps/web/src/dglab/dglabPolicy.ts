@@ -4,6 +4,7 @@ export interface DgLabPenaltyCommand {
   readonly points: number;
   readonly strength: number;
   readonly durationMs: number;
+  readonly forceMax?: boolean;
 }
 
 function positiveInteger(value: number, name: string): number {
@@ -12,6 +13,7 @@ function positiveInteger(value: number, name: string): number {
 }
 
 export function eventPoints(event: DgLabPenaltyEvent, config: DgLabConfig): number {
+  if (event.kind === "defeat") return 0;
   const amount = positiveInteger(event.amount, "event amount");
   return amount * config.weights[event.kind];
 }
@@ -20,6 +22,14 @@ export function createPenaltyCommand(
   event: DgLabPenaltyEvent,
   config: DgLabConfig
 ): DgLabPenaltyCommand | null {
+  if (event.kind === "defeat") {
+    return Object.freeze({
+      points: 0,
+      strength: config.maxStrength,
+      durationMs: 10_000,
+      forceMax: true
+    });
+  }
   const points = eventPoints(event, config);
   if (points <= 0) return null;
   return Object.freeze({
@@ -39,4 +49,3 @@ export function cancellationPoints(event: DgLabPenaltyEvent, config: DgLabConfig
   if (event.kind !== "attackCancelled") return 0;
   return eventPoints(event, config);
 }
-
