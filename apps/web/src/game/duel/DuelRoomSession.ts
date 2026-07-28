@@ -101,7 +101,7 @@ export class DuelRoomSession {
     return resumed;
   }
   async createRoom(input: EnterRoomInput): Promise<void> {
-    await this.#enter(input, null);
+    await this.#enter(input, null, input.roomCode?.trim().toUpperCase() || undefined);
   }
   async joinRoom(input: EnterRoomInput): Promise<void> {
     const roomCode = input.roomCode?.trim().toUpperCase() ?? "";
@@ -134,12 +134,10 @@ export class DuelRoomSession {
     }
     this.#commands.nextRound();
   }
-
   forfeit(): void {
     this.#commands.forfeit();
   }
   setLocalFeedback(feedback: MatchFeedbackState): void { this.#feedbackPublisher.update(feedback); }
-
   leave(): void {
     const room = this.#view.room;
     if (room !== null && room.phase !== "playing") {
@@ -164,7 +162,7 @@ export class DuelRoomSession {
     this.#listeners.clear();
   }
 
-  async #enter(input: EnterRoomInput, roomCode: string | null): Promise<void> {
+  async #enter(input: EnterRoomInput, roomCode: string | null, requestedRoomCode?: string): Promise<void> {
     const displayName = input.displayName.trim();
     if (displayName.length === 0) throw new Error("请输入昵称。");
     this.#setView({ connection: "connecting", error: null });
@@ -172,7 +170,8 @@ export class DuelRoomSession {
     if (roomCode === null) {
       this.#send({
         type: "room.create",
-        requestId: this.#requestId("create")
+        requestId: this.#requestId("create"),
+        ...(requestedRoomCode === undefined ? {} : { roomCode: requestedRoomCode })
       });
       return;
     }

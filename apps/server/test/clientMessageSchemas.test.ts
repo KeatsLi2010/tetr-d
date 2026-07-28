@@ -21,6 +21,14 @@ test("strict schemas accept the supported handshake and room commands", () => {
       ready: true
     })
   );
+  assert.deepEqual(
+    parseClientMessage({
+      type: "room.create",
+      requestId: "create-custom",
+      roomCode: "abc234"
+    }),
+    { type: "room.create", requestId: "create-custom", roomCode: "abc234" }
+  );
 });
 
 test("client payloads cannot forge actor, time or internal commands", () => {
@@ -74,6 +82,14 @@ test("request ids, numeric fields and unknown keys are bounded", () => {
       roomCode: "ABC234",
       participation: "player",
       unknown: true
+    }),
+    null
+  );
+  assert.equal(
+    parseClientMessage({
+      type: "room.create",
+      requestId: "create-invalid-code",
+      roomCode: "ABC230"
     }),
     null
   );

@@ -15,6 +15,8 @@ export type RoomClientMessage =
   | {
       readonly type: "room.create";
       readonly requestId: string;
+      /** Optional six-character code; omitted means generate one server-side. */
+      readonly roomCode?: string;
       readonly settings?: Partial<RoomSettings>;
     }
   | {

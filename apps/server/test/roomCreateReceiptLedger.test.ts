@@ -76,6 +76,35 @@ test("same session and request ID with another payload is rejected", () => {
   );
 });
 
+test("custom room codes participate in canonical create receipts", () => {
+  const ledger = new RoomCreateReceiptLedger({ now: () => 1_000 });
+  ledger.record(
+    {
+      sessionId: "session-a",
+      requestId: "create-custom",
+      roomCode: "abc234"
+    },
+    { roomId: "room-custom", revision: 1 }
+  );
+
+  assert.equal(
+    ledger.lookup({
+      sessionId: "session-a",
+      requestId: "create-custom",
+      roomCode: "ABC234"
+    }).kind,
+    "replay"
+  );
+  assert.deepEqual(
+    ledger.lookup({
+      sessionId: "session-a",
+      requestId: "create-custom",
+      roomCode: "DEF567"
+    }),
+    { kind: "request_id_reused" }
+  );
+});
+
 test("receipts expire exactly at the configured TTL", () => {
   let nowMs = 1_000;
   const ledger = new RoomCreateReceiptLedger({

@@ -32,6 +32,7 @@ export type ProtocolErrorCode =
   | "AUTH_REQUIRED"
   | "RATE_LIMITED"
   | "ROOM_NOT_FOUND"
+  | "ROOM_CODE_TAKEN"
   | "MESSAGE_INVALID";
 
 export type ServerMessage =

@@ -13,6 +13,7 @@ export interface RoomCreateReceipt {
 export interface RoomCreateReceiptKey {
   readonly sessionId: string;
   readonly requestId: string;
+  readonly roomCode?: string;
   readonly settings?: Partial<RoomSettings>;
 }
 
@@ -66,7 +67,10 @@ function entryKey(input: RoomCreateReceiptKey): string {
 }
 
 function payloadKey(input: RoomCreateReceiptKey): string {
-  return canonicalJson({ settings: input.settings ?? {} });
+  return canonicalJson({
+    roomCode: input.roomCode?.trim().toUpperCase() ?? null,
+    settings: input.settings ?? {}
+  });
 }
 
 export class RoomCreateReceiptLedger {

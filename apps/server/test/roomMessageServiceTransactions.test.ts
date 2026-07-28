@@ -220,6 +220,7 @@ test("create replays canonical payload and rejects request reuse", async (t) => 
   await fixture.service.handle(guest.context, {
     type: "room.create",
     requestId: "create-1",
+    roomCode: "def567",
     settings: { targetWins: 3, allowSpectators: false }
   });
   const firstOk = messages(guest).find((message) =>
@@ -227,11 +228,16 @@ test("create replays canonical payload and rejects request reuse", async (t) => 
   );
   assert.equal(firstOk?.replayed, false);
   assert.equal(fixture.rooms.createCalls, 1);
+  assert.equal(
+    fixture.rooms.getById(String(firstOk?.roomId))?.state.roomCode,
+    "DEF567"
+  );
 
   guest.transport.sent.length = 0;
   await fixture.service.handle(guest.context, {
     type: "room.create",
     requestId: "create-1",
+    roomCode: "DEF567",
     settings: { allowSpectators: false, targetWins: 3 }
   });
   assert.deepEqual(
@@ -243,6 +249,7 @@ test("create replays canonical payload and rejects request reuse", async (t) => 
   await fixture.service.handle(guest.context, {
     type: "room.create",
     requestId: "create-1",
+    roomCode: "DEF567",
     settings: { targetWins: 5, allowSpectators: false }
   });
   assert.equal(messages(guest).at(-1)?.code, "REQUEST_ID_REUSED");

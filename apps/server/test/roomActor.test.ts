@@ -193,6 +193,35 @@ test("registry retries code collisions and resolves codes case-insensitively", (
   assert.equal(registry.getByCode("ABC234"), null);
 });
 
+test("registry preserves a requested room code and rejects duplicates", () => {
+  let roomNumber = 0;
+  const registry = new RoomRegistry({
+    codeFactory: () => "ZZZ999",
+    roomIdFactory: () => `custom-room-${++roomNumber}`
+  });
+  const input = {
+    creator: { playerId: "custom-host", displayName: "Custom Host" },
+    connectionId: "custom-connection",
+    nowMs: 1_000,
+    roomCode: "abc234"
+  };
+
+  const created = registry.create(input);
+
+  assert.equal(created.roomCode, "ABC234");
+  assert.strictEqual(registry.getByCode("abc234"), created);
+  assert.throws(
+    () => registry.create({
+      ...input,
+      creator: { playerId: "custom-host-2", displayName: "Custom Host 2" },
+      connectionId: "custom-connection-2",
+      roomCode: "ABC234"
+    }),
+    /ROOM_CODE_TAKEN/
+  );
+  assert.equal(roomNumber, 1);
+});
+
 test("generated invite codes exclude ambiguous characters", () => {
   for (let index = 0; index < 100; index += 1) {
     assert.match(generateRoomCode(), /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/);

@@ -19,6 +19,7 @@ export const roomCreateMessageSchema = z
   .object({
     type: z.literal("room.create"),
     requestId: requestIdSchema,
+    roomCode: roomCodeSchema.optional(),
     settings: settingsPatchSchema.optional()
   })
   .strict();
