@@ -55,6 +55,7 @@ export function useSoloGame(
     let defeatReported = false;
     const session = new SoloGameSession({
       seed: makeSeed(),
+      nextSeed: makeSeed,
       now: monotonicNow,
       actionsForTick: (tickTimeMs) =>
         controller.actionsForTick(tickTimeMs),

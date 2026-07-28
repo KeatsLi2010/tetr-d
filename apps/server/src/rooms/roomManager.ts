@@ -40,6 +40,7 @@ export interface RoomManagerOptions {
 
 export interface CreateManagedRoomInput {
   readonly principal: RoomActorPrincipal;
+  readonly roomCode?: string;
   readonly settings?: Partial<RoomSettings>;
 }
 
@@ -94,6 +95,7 @@ export class RoomManager {
       creator: input.principal.player,
       connectionId: input.principal.connectionId,
       nowMs: this.#readNow(),
+      ...(input.roomCode === undefined ? {} : { roomCode: input.roomCode }),
       ...(input.settings === undefined ? {} : { settings: input.settings })
     });
     const runtime = this.#install(registered);

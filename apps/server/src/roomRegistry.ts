@@ -31,6 +31,7 @@ export interface RegisterRoomInput {
   readonly creator: PublicRoomPlayer;
   readonly connectionId: string;
   readonly nowMs: number;
+  readonly roomCode?: string;
   readonly settings?: Partial<RoomSettings>;
 }
 
@@ -84,15 +85,25 @@ export class RoomRegistry {
     if (this.#byId.size >= this.#maxRooms) {
       throw new Error("ROOM_CAPACITY_REACHED");
     }
-    let roomCode: string | null = null;
-    for (let attempt = 0; attempt < 32; attempt += 1) {
-      const candidate = this.#codeFactory();
-      if (
-        /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(candidate) &&
-        !this.#roomIdByCode.has(candidate)
-      ) {
-        roomCode = candidate;
-        break;
+    const requestedRoomCode = input.roomCode?.trim().toUpperCase();
+    let roomCode: string | null = requestedRoomCode ?? null;
+    if (roomCode !== null) {
+      if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(roomCode)) {
+        throw new Error("INVALID_ROOM_CODE");
+      }
+      if (this.#roomIdByCode.has(roomCode)) {
+        throw new Error("ROOM_CODE_TAKEN");
+      }
+    } else {
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        const candidate = this.#codeFactory();
+        if (
+          /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(candidate) &&
+          !this.#roomIdByCode.has(candidate)
+        ) {
+          roomCode = candidate;
+          break;
+        }
       }
     }
     if (roomCode === null) throw new Error("ROOM_CODE_EXHAUSTED");

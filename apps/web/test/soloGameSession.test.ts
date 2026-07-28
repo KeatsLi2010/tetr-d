@@ -8,8 +8,10 @@ import {
 } from "@tetr-d/game-core";
 
 import { SoloGameSession } from "../src/game/solo/SoloGameSession.ts";
+import { LocalSevenBagPieceSource } from "../src/game/solo/LocalSevenBagPieceSource.ts";
 
 const SEED: SevenBagSeed = [1, 2, 3, 4];
+const NEXT_SEED: SevenBagSeed = [5, 6, 7, 8];
 
 test("dispatch queues input without advancing physical time, then restart resets", () => {
   let now = 0;
@@ -33,6 +35,29 @@ test("dispatch queues input without advancing physical time, then restart resets
   assert.equal(session.snapshot.stats.pieces, 0);
   assert.equal(session.snapshot.player.active?.kind, firstPiece);
   assert.equal(session.snapshot.player.pieceCursor, 1);
+});
+
+test("restart can replace the seed through its fresh-seed factory", () => {
+  let calls = 0;
+  const session = new SoloGameSession({
+    seed: SEED,
+    nextSeed: () => {
+      calls += 1;
+      return NEXT_SEED;
+    },
+    now: () => 0
+  });
+  const expected = new LocalSevenBagPieceSource(NEXT_SEED);
+
+  session.start();
+  session.restart();
+
+  assert.equal(calls, 1);
+  assert.equal(session.snapshot.player.active?.kind, expected.draw());
+  assert.deepEqual(
+    session.snapshot.player.next,
+    expected.peek(session.snapshot.player.next.length)
+  );
 });
 
 test("paused time does not advance simulation or elapsed statistics", () => {

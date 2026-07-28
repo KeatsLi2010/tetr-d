@@ -45,6 +45,21 @@ test("hold buffering repeats across generations and stops on release", () => {
   assert.deepEqual(buffer.spawned("automatic"), []);
 });
 
+test("held IRS follows the newest physical rotation binding", () => {
+  const buffer = new GenerationInputBuffer(configured("hold", "off"));
+  buffer.keyDown("KeyX");
+  buffer.keyDown("ControlLeft");
+  buffer.keyDown("Numpad1");
+
+  assert.deepEqual(buffer.spawned("automatic"), [
+    { kind: "rotate", direction: "cw" }
+  ]);
+  buffer.keyUp("Numpad1");
+  assert.deepEqual(buffer.spawned("automatic"), [
+    { kind: "rotate", direction: "ccw" }
+  ]);
+});
+
 test("prepared hard-drop buffering is emitted and confirmed only once", () => {
   const engine = new HandlingEngine(configured("hold", "off"));
   assert.deepEqual(engine.keyDown({ code: "KeyX", atMs: 0 }), [

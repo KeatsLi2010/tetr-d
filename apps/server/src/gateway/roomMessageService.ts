@@ -131,6 +131,7 @@ export class RoomMessageService {
     const key = {
       sessionId: context.sessionId,
       requestId: message.requestId,
+      ...(message.roomCode === undefined ? {} : { roomCode: message.roomCode }),
       ...(message.settings === undefined ? {} : { settings: message.settings })
     };
     let createdRoomId: string | null = null;
@@ -170,6 +171,7 @@ export class RoomMessageService {
       }
       const room = this.#rooms.create({
         principal: this.#principal(context),
+        ...(message.roomCode === undefined ? {} : { roomCode: message.roomCode }),
         ...(message.settings === undefined ? {} : { settings: message.settings })
       });
       createdRoomId = room.roomId;
@@ -199,11 +201,13 @@ export class RoomMessageService {
       }
       this.#report(error);
       if (!committed) {
+        const roomCodeTaken =
+          error instanceof Error && error.message === "ROOM_CODE_TAKEN";
         this.#sendError(
           context,
-          "MESSAGE_INVALID",
-          "Room creation failed.",
-          true,
+          roomCodeTaken ? "ROOM_CODE_TAKEN" : "MESSAGE_INVALID",
+          roomCodeTaken ? "Room code is already in use." : "Room creation failed.",
+          !roomCodeTaken,
           message.requestId
         );
       }

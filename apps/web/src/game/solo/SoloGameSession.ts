@@ -32,6 +32,8 @@ export type SoloTickActionSource = (
 
 export interface SoloGameSessionOptions {
   readonly seed: SevenBagSeed;
+  /** Supplies a fresh seed for each explicit restart when provided. */
+  readonly nextSeed?: () => SevenBagSeed;
   readonly attackSeed?: number;
   readonly playerId?: string;
   readonly now?: () => number;
@@ -61,6 +63,7 @@ export class SoloGameSession implements GameSession {
   readonly #now: () => number;
   readonly #maxCatchUpTicks: number;
   readonly #listeners = new Set<GameSessionListener>();
+  #seed: SevenBagSeed;
   #simulation: PlayerSimulation;
   #phase: GameSessionPhase = "idle";
   #frame = 0;
@@ -79,6 +82,7 @@ export class SoloGameSession implements GameSession {
       !Number.isSafeInteger(this.#maxCatchUpTicks) ||
       this.#maxCatchUpTicks < 1
     ) throw new RangeError("Catch-up tick limit must be a positive integer.");
+    this.#seed = options.seed;
     this.#simulation = this.#createSimulation();
   }
 
@@ -116,7 +120,10 @@ export class SoloGameSession implements GameSession {
 
   restart(): GameSessionSnapshot {
     this.#assertLive();
-    this.#simulation = this.#createSimulation();
+    const nextSeed = this.#options.nextSeed?.() ?? this.#seed;
+    const nextSimulation = this.#createSimulation(nextSeed);
+    this.#seed = nextSeed;
+    this.#simulation = nextSimulation;
     this.#phase = this.#simulation.view.toppedOut ? "ended" : "playing";
     this.#frame = 0;
     this.#lines = 0;
@@ -218,16 +225,16 @@ export class SoloGameSession implements GameSession {
     return result.toppedOut;
   }
 
-  #createSimulation(): PlayerSimulation {
+  #createSimulation(seed = this.#seed): PlayerSimulation {
     return new PlayerSimulation({
       playerId: this.#options.playerId ?? "solo",
       rules: createPlayerSimulationRules(
         SOLO_TICK_RATE_HZ,
         this.#options.ruleOverrides
       ),
-      pieces: new LocalSevenBagPieceSource(this.#options.seed),
+      pieces: new LocalSevenBagPieceSource(seed),
       nextAttackRoundingRoll: createDeterministicAttackRng(
-        this.#options.seed,
+        seed,
         this.#options.attackSeed
       ),
       ...(this.#options.initialBoard === undefined
