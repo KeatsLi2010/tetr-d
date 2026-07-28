@@ -57,13 +57,20 @@ function directionOf(
   return null;
 }
 
+interface DirectionPress {
+  readonly code: string;
+  readonly direction: ShiftDirection;
+}
+
 export class HandlingEngine {
   readonly #config: PlayerConfig;
   readonly #bindingIndex: ReadonlyMap<string, readonly PlayerActionName[]>;
   readonly #softDropBaseRate: number;
   readonly #pressedCodes = new Set<string>();
   readonly #heldCounts = new Map<PlayerActionName, number>();
-  readonly #directionOrder: ShiftDirection[] = [];
+  /** Physical direction presses, newest last, so key-up restores the exact
+   * still-held direction instead of relying on action-level reference counts. */
+  readonly #directionOrder: DirectionPress[] = [];
   #nowMs: number;
   #activeDirection: ShiftDirection | null = null;
   #horizontalCharged = false;
@@ -97,9 +104,20 @@ export class HandlingEngine {
     }
     this.#pressedCodes.add(input.code);
     for (const action of this.#bindingIndex.get(input.code) ?? []) {
+      const direction = directionOf(action);
       const count = this.#heldCounts.get(action) ?? 0;
       this.#heldCounts.set(action, count + 1);
-      if (count === 0) this.#pressAction(action, output);
+      if (direction !== null) {
+        this.#directionOrder.push({ code: input.code, direction });
+        // A second binding for the same action must still become the newest
+        // direction when the player is reversing from the other side. It does
+        // not emit a duplicate step when that direction is already active.
+        if (count === 0 || this.#activeDirection !== direction) {
+          this.#selectDirection(direction, output);
+        }
+      } else if (count === 0) {
+        this.#pressAction(action, output);
+      }
     }
     return Object.freeze(output);
   }
@@ -108,7 +126,14 @@ export class HandlingEngine {
     const output = [...this.advance(input.atMs)];
     if (!this.#pressedCodes.delete(input.code)) return Object.freeze(output);
     for (const action of this.#bindingIndex.get(input.code) ?? []) {
+      const direction = directionOf(action);
       const count = this.#heldCounts.get(action) ?? 0;
+      if (direction !== null) {
+        this.#removeDirectionPress(input.code, direction);
+        if (count <= 1) this.#heldCounts.delete(action);
+        else this.#heldCounts.set(action, count - 1);
+        continue;
+      }
       if (count <= 1) {
         this.#heldCounts.delete(action);
         this.#releaseAction(action, output);
@@ -116,6 +141,8 @@ export class HandlingEngine {
         this.#heldCounts.set(action, count - 1);
       }
     }
+    const nextDirection = this.#directionOrder.at(-1)?.direction ?? null;
+    this.#selectDirection(nextDirection, output);
     return Object.freeze(output);
   }
 
@@ -176,16 +203,20 @@ export class HandlingEngine {
     this.#nextSoftDropAt = Number.POSITIVE_INFINITY;
   }
 
+  #removeDirectionPress(code: string, direction: ShiftDirection): void {
+    for (let index = this.#directionOrder.length - 1; index >= 0; index -= 1) {
+      const press = this.#directionOrder[index];
+      if (press?.code === code && press.direction === direction) {
+        this.#directionOrder.splice(index, 1);
+        return;
+      }
+    }
+  }
+
   #pressAction(
     action: PlayerActionName,
     output: ExpandedPlayerAction[]
   ): void {
-    const direction = directionOf(action);
-    if (direction !== null) {
-      this.#directionOrder.push(direction);
-      this.#selectDirection(direction, output);
-      return;
-    }
     if (action === "softDrop") {
       this.#restartHeldSoftDrop(output);
       return;
@@ -212,17 +243,6 @@ export class HandlingEngine {
     action: PlayerActionName,
     output: ExpandedPlayerAction[]
   ): void {
-    const direction = directionOf(action);
-    if (direction !== null) {
-      const index = this.#directionOrder.lastIndexOf(direction);
-      if (index >= 0) this.#directionOrder.splice(index, 1);
-      if (this.#activeDirection === direction) {
-        this.#selectDirection(
-          this.#directionOrder.at(-1) ?? null,
-          output
-        );
-      }
-    }
     if (action === "softDrop") {
       this.#nextSoftDropAt = Number.POSITIVE_INFINITY;
     }

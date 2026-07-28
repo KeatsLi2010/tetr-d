@@ -122,6 +122,31 @@ test("multiple keys for one action use reference counting", () => {
   assert.equal(engine.activeDirection, null);
 });
 
+test("latest physical direction binding wins and releases back in order", () => {
+  const engine = new HandlingEngine(configured({}, {
+    moveLeft: ["ArrowLeft", "Numpad4"],
+    moveRight: ["ArrowRight"]
+  }));
+
+  assert.deepEqual(engine.keyDown({ code: "ArrowLeft", atMs: 0 }), [
+    { kind: "shift", direction: "left", mode: "step" }
+  ]);
+  assert.deepEqual(engine.keyDown({ code: "ArrowRight", atMs: 1 }), [
+    { kind: "shift", direction: "right", mode: "step" }
+  ]);
+  assert.deepEqual(engine.keyDown({ code: "Numpad4", atMs: 2 }), [
+    { kind: "shift", direction: "left", mode: "step" }
+  ]);
+  assert.deepEqual(engine.keyUp({ code: "Numpad4", atMs: 3 }), [
+    { kind: "shift", direction: "right", mode: "step" }
+  ]);
+  assert.deepEqual(engine.keyUp({ code: "ArrowRight", atMs: 4 }), [
+    { kind: "shift", direction: "left", mode: "step" }
+  ]);
+  assert.deepEqual(engine.keyUp({ code: "ArrowLeft", atMs: 5 }), []);
+  assert.equal(engine.activeDirection, null);
+});
+
 test("OS repeat is ignored and blur clears every held action", () => {
   const engine = new HandlingEngine(configured());
   engine.keyDown({ code: "ArrowLeft", atMs: 0 });

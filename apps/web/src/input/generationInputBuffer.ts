@@ -20,6 +20,11 @@ const ROTATION_ACTIONS = {
 type BufferedActionName = keyof typeof ROTATION_ACTIONS | "hold";
 type PreparedCause = Extract<PieceSpawnCause, "hardDrop" | "hold">;
 
+interface RotationPress {
+  readonly code: string;
+  readonly direction: RotationDirection;
+}
+
 function relevant(action: PlayerActionName): action is BufferedActionName {
   return action === "hold" || action in ROTATION_ACTIONS;
 }
@@ -30,7 +35,7 @@ export class GenerationInputBuffer {
   readonly #bindings = new Map<string, BufferedActionName[]>();
   readonly #pressedCodes = new Set<string>();
   readonly #heldCounts = new Map<BufferedActionName, number>();
-  readonly #rotationOrder: RotationDirection[] = [];
+  readonly #rotationOrder: RotationPress[] = [];
   readonly #prepared: PreparedCause[] = [];
   #tapHold = false;
   #tapRotation: RotationDirection | null = null;
@@ -54,11 +59,13 @@ export class GenerationInputBuffer {
     for (const action of this.#bindings.get(code) ?? []) {
       const count = this.#heldCounts.get(action) ?? 0;
       this.#heldCounts.set(action, count + 1);
-      if (count > 0) continue;
-      if (action === "hold") this.#tapHold = true;
-      else {
+      if (action === "hold") {
+        this.#tapHold = true;
+      } else {
         const direction = ROTATION_ACTIONS[action];
-        this.#rotationOrder.push(direction);
+        // Keep one entry per physical key so releasing an alternate binding
+        // cannot remove a different, still-held rotation.
+        this.#rotationOrder.push({ code, direction });
         this.#tapRotation = direction;
       }
     }
@@ -67,17 +74,15 @@ export class GenerationInputBuffer {
   keyUp(code: string): void {
     if (!this.#pressedCodes.delete(code)) return;
     for (const action of this.#bindings.get(code) ?? []) {
+      if (action !== "hold") {
+        this.#removeRotationPress(code, ROTATION_ACTIONS[action]);
+      }
       const count = this.#heldCounts.get(action) ?? 0;
       if (count > 1) {
         this.#heldCounts.set(action, count - 1);
         continue;
       }
       this.#heldCounts.delete(action);
-      if (action !== "hold") {
-        const direction = ROTATION_ACTIONS[action];
-        const index = this.#rotationOrder.lastIndexOf(direction);
-        if (index >= 0) this.#rotationOrder.splice(index, 1);
-      }
     }
   }
 
@@ -125,6 +130,19 @@ export class GenerationInputBuffer {
     this.#tapRotation = null;
   }
 
+  #removeRotationPress(
+    code: string,
+    direction: RotationDirection
+  ): void {
+    for (let index = this.#rotationOrder.length - 1; index >= 0; index -= 1) {
+      const press = this.#rotationOrder[index];
+      if (press?.code === code && press.direction === direction) {
+        this.#rotationOrder.splice(index, 1);
+        return;
+      }
+    }
+  }
+
   #consume(
     cause: PieceSpawnCause,
     existing: readonly ExpandedPlayerAction[] = []
@@ -134,7 +152,7 @@ export class GenerationInputBuffer {
       ? this.#heldCounts.has("hold")
       : this.#ihs === "tap" && this.#tapHold;
     const rotation = this.#irs === "hold"
-      ? this.#rotationOrder.at(-1) ?? null
+      ? this.#rotationOrder.at(-1)?.direction ?? null
       : this.#irs === "tap" ? this.#tapRotation : null;
     if (
       cause !== "hold" &&
