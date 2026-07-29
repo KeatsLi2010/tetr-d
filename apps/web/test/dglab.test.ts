@@ -30,6 +30,7 @@ test("DG-LAB config keeps a local safety ceiling", () => {
   assert.equal(DEFAULT_DGLAB_CONFIG.weights.b2bBreak, 5);
   const accepted = normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, enabled: true, maxStrength: 200 });
   assert.equal(accepted?.maxStrength, 200);
+  assert.equal(normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, channel: "both" })?.channel, "both");
   const config = normalizeDgLabConfig({ ...DEFAULT_DGLAB_CONFIG, enabled: true, maxStrength: 201 });
   assert.equal(config, null);
   assert.equal(DEFAULT_DGLAB_CONFIG.enabled, false);
@@ -143,6 +144,22 @@ test("controller exposes Bluetooth connection and both channel readings", () => 
   assert.ok(waveformIndex >= 0 && strengthIndex >= 0 && waveformIndex < strengthIndex);
   controller.disarm();
   assert.equal(controller.status.armed, false);
+  controller.dispose();
+});
+
+test("controller mirrors a penalty to both output channels", () => {
+  let fake: FakeTransport | null = null;
+  const controller = new DgLabController({ ...DEFAULT_DGLAB_CONFIG, enabled: true, channel: "both" }, {
+    createTransport: (onStatus) => { fake = new FakeTransport(onStatus); return fake; }
+  });
+  controller.connect();
+  assert.equal(controller.arm(), true);
+  controller.handleEvent({ kind: "b2bBreak", amount: 1, source: "solo" });
+  const waveforms = fake!.messages.filter((message) => message.type === "clientMsg");
+  const strengths = fake!.messages.filter((message) => message.type === 3);
+  assert.deepEqual(waveforms.map((message) => message.channel), ["A", "B"]);
+  assert.deepEqual(strengths.map((message) => message.channel), [1, 2]);
+  assert.equal(strengths[0]?.strength, strengths[1]?.strength);
   controller.dispose();
 });
 

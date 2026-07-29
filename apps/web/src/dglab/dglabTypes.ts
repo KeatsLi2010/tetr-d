@@ -1,5 +1,8 @@
 export type DgLabChannel = "A" | "B";
 
+/** Physical output selection. `both` mirrors the same penalty to A and B. */
+export type DgLabOutputChannel = DgLabChannel | "both";
+
 export type DgLabWaveformId = "breath" | "tide" | "custom";
 
 export interface DgLabWaveformFrame {
@@ -36,7 +39,7 @@ export interface DgLabConfig {
   readonly enabled: boolean;
   readonly waveform: DgLabWaveformId;
   readonly customWaveform: readonly DgLabWaveformFrame[];
-  readonly channel: DgLabChannel;
+  readonly channel: DgLabOutputChannel;
   readonly maxStrength: number;
   readonly baseStrength: number;
   readonly strengthPerPoint: number;
