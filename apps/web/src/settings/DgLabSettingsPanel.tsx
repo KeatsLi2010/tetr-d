@@ -1,4 +1,4 @@
-import type { DgLabChannel, DgLabConfig, DgLabWaveformId } from "../dglab/index.ts";
+import type { DgLabConfig, DgLabOutputChannel, DgLabWaveformId } from "../dglab/index.ts";
 import { waveformFrames } from "../dglab/index.ts";
 import { DgLabWaveformEditor } from "./DgLabWaveformEditor.tsx";
 
@@ -53,7 +53,7 @@ export function DgLabSettingsPanel({
     <div className="dglab-settings-grid">
       <Field label="启用反馈" help="默认关闭；游戏页仍需单独 Arm 才会输出。"><input checked={config.enabled} onChange={(event) => set("enabled", event.currentTarget.checked)} type="checkbox" /></Field>
       <Field label="连接方式" help="浏览器直接连接郊狼 3.0，不经过 WebSocket 中继；配置和最近设备提示保存在当前 Origin，本地刷新后可手动恢复。"><div className="dglab-device-mode"><span>Web Bluetooth</span><strong>本地直连</strong></div></Field>
-      <Field label="输出通道" help="A/B 双通道独立显示；当前惩罚输出到选中的通道。"><ChoiceGroup options={[{ value: "A" as const, label: "A 通道" }, { value: "B" as const, label: "B 通道" }]} value={config.channel} onChange={(value: DgLabChannel) => set("channel", value)} /></Field>
+      <Field label="输出通道" help="A/B 双通道独立显示；可选单路或 A+B 同时输出。"><ChoiceGroup options={[{ value: "A" as const, label: "A 通道" }, { value: "B" as const, label: "B 通道" }, { value: "both" as const, label: "A+B 双通道" }]} value={config.channel} onChange={(value: DgLabOutputChannel) => set("channel", value)} /></Field>
       <Field label="波形预设" help="官方 V3 每 100ms 写入四个 25ms 单元；自定义支持编辑或导入。"><ChoiceGroup options={[{ value: "breath" as const, label: "呼吸 / Breath" }, { value: "tide" as const, label: "潮汐 / Tide" }, { value: "custom" as const, label: "自定义 / Custom" }]} value={config.waveform} onChange={setWaveform} /></Field>
       <Field label={`应用强度上限 ${config.maxStrength}`} help="应用硬上限 200；仍受设备软上限约束。"><input max={200} min={0} onChange={(event) => set("maxStrength", range(Number(event.currentTarget.value), 0, 200))} type="range" value={config.maxStrength} /></Field>
       <Field label={`基础强度 ${config.baseStrength}`} help="每个事件在此基础上按积分增加。"><input max={40} min={0} onChange={(event) => set("baseStrength", range(Number(event.currentTarget.value), 0, 40))} type="range" value={config.baseStrength} /></Field>

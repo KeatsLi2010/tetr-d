@@ -1,4 +1,5 @@
 export * from "./dglabConfig.ts";
+export * from "./dglabChannels.ts";
 export * from "./dglabBluetooth.ts";
 export * from "./dglabDeviceStorage.ts";
 export * from "./dglabController.ts";

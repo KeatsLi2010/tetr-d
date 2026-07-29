@@ -4,6 +4,13 @@ import {
   saveRememberedDgLabDevice,
   type DgLabDeviceStorage
 } from "./dglabDeviceStorage.ts";
+import {
+  clearWaveformState,
+  createWaveformState,
+  parseWaveformPayload,
+  waveformBytes,
+  type DgLabWaveformState
+} from "./dglabBluetoothWaveform.ts";
 
 export const DGLAB_BLUETOOTH_SERVICE_UUID = "0000180c-0000-1000-8000-00805f9b34fb";
 export const DGLAB_BLUETOOTH_WRITE_UUID = "0000150a-0000-1000-8000-00805f9b34fb";
@@ -58,8 +65,6 @@ export interface DgLabBluetoothTransportOptions {
 type StatusListener = (status: DgLabConnectionStatus, clientId: string | null, error?: string) => void;
 type MessageListener = (message: DgLabTransportMessage) => void;
 
-const INVALID_WAVEFORM = Object.freeze({ frequencies: [10, 10, 10, 10], intensities: [101, 101, 101, 101] });
-
 function browserAdapter(): DgLabBluetoothAdapter | undefined {
   const candidate = (globalThis.navigator as Navigator & { readonly bluetooth?: DgLabBluetoothAdapter } | undefined)?.bluetooth;
   return candidate;
@@ -111,13 +116,6 @@ function byte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
-function hexBytes(value: string): readonly number[] | null {
-  if (!/^[0-9A-Fa-f]{16}$/.test(value)) return null;
-  const bytes: number[] = [];
-  for (let index = 0; index < value.length; index += 2) bytes.push(Number.parseInt(value.slice(index, index + 2), 16));
-  return bytes;
-}
-
 function softLimitFrame(limit: number): Uint8Array {
   const value = clampStrength(limit);
   return Uint8Array.from([0xBF, value, value, 0, 0, 0, 0]);
@@ -129,14 +127,11 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   #server: DgLabBluetoothServer | null = null;
   #writeCharacteristic: DgLabBluetoothCharacteristic | null = null;
   #notifyCharacteristic: DgLabBluetoothCharacteristic | null = null;
-  #waveformTimer: ReturnType<typeof setInterval> | null = null;
-  #waveformStopTimer: ReturnType<typeof setTimeout> | null = null;
   #writeQueue: Promise<void> = Promise.resolve();
   #strengthA = 0;
   #strengthB = 0;
-  #waveformChannel: "A" | "B" = "A";
-  #waveformPayload: readonly string[] = [];
-  #waveformIndex = 0;
+  #waveformA: DgLabWaveformState = createWaveformState();
+  #waveformB: DgLabWaveformState = createWaveformState();
   #generation = 0;
   #maxStrength: number;
   readonly #adapter: DgLabBluetoothAdapter | undefined;
@@ -188,13 +183,19 @@ export class DgLabBluetoothTransport implements DgLabTransport {
       if (message.channel === 2) this.#strengthB = strength;
       // The controller loads the waveform immediately before setting strength.
       // Avoid emitting an invalid empty-waveform B0 frame during that handoff.
-      if (this.#waveformPayload.length > 0) this.#queueFrame();
+      if (this.#waveformA.payload.length > 0 || this.#waveformB.payload.length > 0) this.#queueFrame();
       return;
     }
     if (message.type === 4 && typeof message.message === "string" && message.message.startsWith("clear-")) {
-      this.#stopWaveform();
-      this.#strengthA = 0;
-      this.#strengthB = 0;
+      const channel = message.message.slice(6);
+      if (channel !== "2") {
+        clearWaveformState(this.#waveformA);
+        this.#strengthA = 0;
+      }
+      if (channel !== "1") {
+        clearWaveformState(this.#waveformB);
+        this.#strengthB = 0;
+      }
       this.#queueFrame();
       return;
     }
@@ -205,15 +206,18 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     if (channel !== "A" && channel !== "B") return;
     let payload: unknown;
     try { payload = JSON.parse(message.message.slice(separator + 1)); } catch { return; }
-    if (!Array.isArray(payload) || payload.some((item) => typeof item !== "string" || hexBytes(item) === null)) return;
-    this.#stopWaveform();
-    this.#waveformChannel = channel;
-    this.#waveformPayload = payload as string[];
-    this.#waveformIndex = 0;
+    const waveform = parseWaveformPayload(payload);
+    if (waveform === null) return;
+    const state = channel === "A" ? this.#waveformA : this.#waveformB;
+    clearWaveformState(state);
+    state.payload = waveform;
     this.#queueFrame();
     const durationMs = Math.max(100, Math.floor(message.durationMs ?? (message.time ?? 1) * 1_000));
-    this.#waveformTimer = setInterval(() => this.#queueFrame(), 100);
-    this.#waveformStopTimer = setTimeout(() => this.#stopWaveform(), durationMs);
+    state.timer = setInterval(() => this.#queueFrame(channel), 100);
+    state.stopTimer = setTimeout(() => {
+      clearWaveformState(state);
+      this.#queueFrame();
+    }, durationMs);
   }
 
   setSafetyLimit(strength: number): void {
@@ -312,20 +316,18 @@ export class DgLabBluetoothTransport implements DgLabTransport {
     });
   }
 
-  #queueFrame(): void {
-    const active = this.#waveformPayload[this.#waveformIndex % Math.max(1, this.#waveformPayload.length)];
-    this.#waveformIndex += 1;
-    const a = this.#waveformChannel === "A" ? hexBytes(active ?? "") : null;
-    const b = this.#waveformChannel === "B" ? hexBytes(active ?? "") : null;
+  #queueFrame(advanceChannel?: "A" | "B"): void {
+    const a = waveformBytes(this.#waveformA, advanceChannel === "A");
+    const b = waveformBytes(this.#waveformB, advanceChannel === "B");
     const frame = new Uint8Array(20);
     frame[0] = 0xB0;
     frame[1] = 0x0F;
     frame[2] = byte(this.#strengthA);
     frame[3] = byte(this.#strengthB);
-    frame.set(a === null ? INVALID_WAVEFORM.frequencies : a.slice(0, 4), 4);
-    frame.set(a === null ? INVALID_WAVEFORM.intensities : a.slice(4, 8), 8);
-    frame.set(b === null ? INVALID_WAVEFORM.frequencies : b.slice(0, 4), 12);
-    frame.set(b === null ? INVALID_WAVEFORM.intensities : b.slice(4, 8), 16);
+    frame.set(a.frequencies, 4);
+    frame.set(a.intensities, 8);
+    frame.set(b.frequencies, 12);
+    frame.set(b.intensities, 16);
     this.#queueWrite(frame);
   }
 
@@ -335,12 +337,8 @@ export class DgLabBluetoothTransport implements DgLabTransport {
   }
 
   #stopWaveform(): void {
-    if (this.#waveformTimer !== null) clearInterval(this.#waveformTimer);
-    if (this.#waveformStopTimer !== null) clearTimeout(this.#waveformStopTimer);
-    this.#waveformTimer = null;
-    this.#waveformStopTimer = null;
-    this.#waveformPayload = [];
-    this.#waveformIndex = 0;
+    clearWaveformState(this.#waveformA);
+    clearWaveformState(this.#waveformB);
   }
 
   #handleDisconnected(): void {

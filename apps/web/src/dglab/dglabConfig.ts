@@ -51,7 +51,7 @@ export function normalizeDgLabConfig(value: unknown): DgLabConfig | null {
   if (source.waveform !== "breath" && source.waveform !== "tide" && source.waveform !== "custom") return null;
   const customWaveform = normalizeCustomWaveform(source.customWaveform ?? []);
   if (source.waveform === "custom" && customWaveform === null) return null;
-  if (source.channel !== "A" && source.channel !== "B") return null;
+  if (source.channel !== "A" && source.channel !== "B" && source.channel !== "both") return null;
   if (!numberInRange(source.maxStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
   if (!numberInRange(source.baseStrength, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;
   if (!numberInRange(source.strengthPerPoint, 0, DGLAB_ABSOLUTE_MAX_STRENGTH)) return null;

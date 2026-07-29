@@ -118,6 +118,11 @@ test("Bluetooth transport writes V3 BF/B0 frames and parses B1 readings", async 
   assert.equal(frame[3], 0);
   assert.deepEqual(Array.from(frame.slice(4, 12)), [12, 12, 12, 12, 0, 10, 20, 30]);
   assert.deepEqual(Array.from(frame.slice(16, 20)), [101, 101, 101, 101]);
+  transport.send({ type: "clientMsg", channel: "B", durationMs: 110, message: 'B:["1414141450505050"]' });
+  await flush();
+  const dualFrame = write.writes.find((item) => item[0] === 0xB0 && item.slice(4, 12).every((value) => value !== 101) && item.slice(12, 20).every((value) => value !== 101));
+  assert.ok(dualFrame, "A and B waveforms should coexist in one B0 frame");
+  assert.deepEqual(Array.from(dualFrame!.slice(12, 20)), [20, 20, 20, 20, 80, 80, 80, 80]);
   notify.emit([0xB1, 0, 12, 7]);
   assert.deepEqual(messages.at(-1), { type: "msg", message: "strength-12+7+30+30" });
   transport.setSafetyLimit?.(45);

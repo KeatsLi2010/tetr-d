@@ -4,6 +4,7 @@ import {
   normalizeDgLabConfig
 } from "./dglabConfig.ts";
 import { DgLabBluetoothTransport } from "./dglabBluetooth.ts";
+import { outputChannels } from "./dglabChannels.ts";
 import { cancellationPoints, createPenaltyCommand } from "./dglabPolicy.ts";
 import { waveformPayload } from "./dglabWaveforms.ts";
 import type {
@@ -61,7 +62,7 @@ export class DgLabController {
   #queue: QueuedCommand[] = [];
   #decayTimer: ReturnType<typeof setTimeout> | null = null;
   #activeTimer: ReturnType<typeof setTimeout> | null = null;
-  #lastSentStrength = 0;
+  #lastSentStrength: Record<DgLabChannel, number> = { A: 0, B: 0 };
   #lastEventAt = -Infinity;
 
   constructor(config: DgLabConfig = DEFAULT_DGLAB_CONFIG, options: DgLabControllerOptions = {}) {
@@ -86,6 +87,7 @@ export class DgLabController {
   updateConfig(config: DgLabConfig): void {
     const normalized = normalizeDgLabConfig(config);
     if (normalized === null) throw new TypeError("Invalid DG-LAB config.");
+    if (this.#armed && normalized.channel !== this.#config.channel) this.#stopOutput(true);
     this.#config = normalized;
     this.#transport?.setSafetyLimit?.(normalized.maxStrength);
     if (!normalized.enabled) this.disarm();
@@ -228,9 +230,11 @@ export class DgLabController {
         this.#config.maxStrength,
         Math.max(0, Math.round(this.#config.baseStrength + points * this.#config.strengthPerPoint))
       );
+    const selected = outputChannels(this.#config.channel);
+    const wasActive = selected.some((channel) => this.#lastSentStrength[channel] > 0);
     try {
       if (strength > 0) {
-        if (this.#lastSentStrength <= 0) {
+        if (!wasActive) {
           const waveformDuration = this.#queue.reduce(
             (longest, item) => Math.max(longest, item.durationMs),
             this.#config.maxQueueSeconds * 1_000
@@ -238,10 +242,10 @@ export class DgLabController {
           this.#sendWaveform(waveformDuration);
         }
         this.#sendStrength(strength);
-      } else if (this.#lastSentStrength > 0) {
+      } else if (wasActive) {
         this.#sendClear();
       }
-      this.#lastSentStrength = strength;
+      for (const channel of selected) this.#lastSentStrength[channel] = strength;
     } catch (error) {
       this.#fail(error instanceof Error ? error.message : "DG-LAB output failed.");
       return;
@@ -308,24 +312,23 @@ export class DgLabController {
   }
 
   #sendStrength(strength: number): void {
-    this.#transport?.send({ type: 3, channel: channelNumber(this.#config.channel), strength, message: "set channel" });
+    for (const channel of outputChannels(this.#config.channel)) {
+      this.#transport?.send({ type: 3, channel: channelNumber(channel), strength, message: "set channel" });
+    }
   }
 
   #sendWaveform(durationMs: number): void {
     const time = Math.max(1, Math.ceil(durationMs / 1_000));
-    const channel = this.#config.channel;
-    this.#transport?.send({
-      type: "clientMsg",
-      channel,
-      time,
-      durationMs,
-      message: `${channel}:${JSON.stringify(waveformPayload(this.#config.waveform, this.#config.customWaveform))}`
-    });
+    const payload = JSON.stringify(waveformPayload(this.#config.waveform, this.#config.customWaveform));
+    for (const channel of outputChannels(this.#config.channel)) {
+      this.#transport?.send({ type: "clientMsg", channel, time, durationMs, message: `${channel}:${payload}` });
+    }
   }
 
   #sendClear(): void {
-    const channel = channelNumber(this.#config.channel);
-    this.#transport?.send({ type: 4, message: `clear-${channel}` });
+    for (const channel of outputChannels(this.#config.channel)) {
+      this.#transport?.send({ type: 4, message: `clear-${channelNumber(channel)}` });
+    }
     this.#sendStrength(0);
   }
 
@@ -335,7 +338,7 @@ export class DgLabController {
     if (this.#activeTimer !== null) clearTimeout(this.#activeTimer);
     this.#activeTimer = null;
     this.#queue = [];
-    this.#lastSentStrength = 0;
+    this.#lastSentStrength = { A: 0, B: 0 };
     if (clearDevice && this.#transport !== null) {
       try { this.#sendClear(); } catch { /* disconnect/stop is best effort */ }
     }
